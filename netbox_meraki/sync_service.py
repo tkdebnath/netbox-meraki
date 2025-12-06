@@ -165,10 +165,17 @@ class MerakiSyncService:
         if site_name != network_name:
             logger.info(f"Transformed site name: '{network_name}' -> '{site_name}'")
         
+        # Generate slug from site name
+        import re
+        slug = re.sub(r'[^a-z0-9-]+', '-', site_name.lower()).strip('-')
+        if not slug:
+            slug = f"site-{network_id.lower()}"
+        
         # Create or update site for this network
         site, created = Site.objects.update_or_create(
             name=site_name,
             defaults={
+                'slug': slug,
                 'description': f"Meraki Network - {org_name}",
                 'comments': f"Meraki Network ID: {network_id}\nOriginal Network Name: {network_name}\nTimezone: {network.get('timeZone', 'N/A')}",
             }
@@ -363,7 +370,12 @@ class MerakiSyncService:
     
     def _sync_vlans(self, network_id: str, site: Site, meraki_tag: Tag):
         """Sync VLANs for a network"""
-        vlans = self.client.get_appliance_vlans(network_id)
+        try:
+            vlans = self.client.get_appliance_vlans(network_id)
+        except Exception as e:
+            # Network might not have MX appliance or VLANs configured
+            logger.debug(f"Could not fetch VLANs for network {network_id}: {e}")
+            return
         
         if not vlans:
             return
@@ -404,7 +416,12 @@ class MerakiSyncService:
     
     def _sync_prefixes(self, network_id: str, site: Site, meraki_tag: Tag):
         """Sync prefixes/subnets for a network"""
-        subnets = self.client.get_appliance_subnets(network_id)
+        try:
+            subnets = self.client.get_appliance_subnets(network_id)
+        except Exception as e:
+            # Network might not have MX appliance or subnets configured
+            logger.debug(f"Could not fetch subnets for network {network_id}: {e}")
+            return
         
         if not subnets:
             return
