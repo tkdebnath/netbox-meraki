@@ -23,7 +23,7 @@ A NetBox plugin that synchronizes Cisco Meraki Dashboard data to NetBox. This pl
 
 ## Requirements
 
-- NetBox 3.5.0 or higher (up to 4.0.0)
+- NetBox 4.4.x
 - Python 3.10 or higher
 - Cisco Meraki Dashboard API key
 
@@ -114,25 +114,68 @@ sudo systemctl restart netbox netbox-rq
 
 ## Usage
 
+### Sync Modes
+
+The plugin supports three synchronization modes to give you control over how changes are applied:
+
+#### Auto Sync
+All changes from Meraki are immediately applied to NetBox without review. This is the fastest mode and is suitable for automated environments where you trust the sync process.
+
+**Use cases:**
+- Scheduled automatic syncs
+- Initial setup and testing
+- Environments where immediate sync is required
+
+#### Sync with Review
+Changes are staged for review before being applied. You can approve or reject individual items (sites, devices, VLANs, prefixes) before they are created or updated in NetBox.
+
+**Use cases:**
+- Production environments requiring change control
+- When you want to selectively sync certain items
+- Compliance requirements for change approval
+
+**Workflow:**
+1. Trigger sync with "Review" mode
+2. Review all proposed changes in the web interface
+3. Approve or reject individual items
+4. Apply approved changes to NetBox
+
+#### Dry Run
+Preview all changes that would be made without actually modifying NetBox. This is useful for testing and understanding what the sync will do.
+
+**Use cases:**
+- Testing before running a real sync
+- Understanding the impact of synchronization
+- Validating configuration before applying changes
+
 ### Web Interface
 
 1. Navigate to **Plugins > Meraki Sync** in NetBox
 2. View the dashboard for sync status and history
 3. Click **Sync Now** to trigger a manual synchronization
-4. View detailed sync logs by clicking on log entries
+4. Select your desired sync mode (Auto, Review, or Dry Run)
+5. For Review mode: navigate to the review page to approve/reject changes
+6. View detailed sync logs by clicking on log entries
 
 ### Management Command
 
 Run synchronization from the command line:
 
 ```bash
+# Auto sync (default - immediate application)
 python manage.py sync_meraki
+
+# Sync with review (stage changes for approval)
+python manage.py sync_meraki --mode review
+
+# Dry run (preview only, no changes applied)
+python manage.py sync_meraki --mode dry_run
 ```
 
 With a custom API key:
 
 ```bash
-python manage.py sync_meraki --api-key your-api-key
+python manage.py sync_meraki --api-key your-api-key --mode review
 ```
 
 ### REST API
@@ -263,6 +306,14 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 ## Changelog
 
+### Version 0.2.0
+
+- Added three sync modes: Auto, Review, and Dry Run
+- Review management interface for staged changes
+- Approve/reject individual items before applying
+- Enhanced management command with --mode option
+- Database-backed review tracking with SyncReview and ReviewItem models
+
 ### Version 0.1.0 (Initial Release)
 
 - Initial plugin implementation
@@ -272,3 +323,4 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 - REST API endpoints
 - Management command for CLI usage
 - Comprehensive sync logging
+- Device role mappings and site name transformation rules

@@ -1,0 +1,76 @@
+{% extends 'base/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Site Name Rules</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>All Site Name Rules</strong>
+                <a href="{% url 'plugins:netbox_meraki:sitenamerule_add' %}" class="btn btn-sm btn-success">
+                    <i class="mdi mdi-plus"></i> Add Rule
+                </a>
+            </div>
+            <div class="card-body">
+                {% if rules %}
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Priority</th>
+                                <th>Name</th>
+                                <th>Pattern</th>
+                                <th>Template</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                                <tr>
+                                    <td>{{ rule.priority }}</td>
+                                    <td>
+                                        <strong>{{ rule.name }}</strong>
+                                        {% if rule.description %}
+                                            <br><small class="text-muted">{{ rule.description|truncatewords:10 }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td><code>{{ rule.regex_pattern }}</code></td>
+                                    <td><code>{{ rule.site_name_template }}</code></td>
+                                    <td>
+                                        {% if rule.enabled %}
+                                            <span class="badge bg-success">Enabled</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Disabled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'plugins:netbox_meraki:sitenamerule_edit' pk=rule.pk %}" class="btn btn-sm btn-warning">Edit</a>
+                                        <a href="{% url 'plugins:netbox_meraki:sitenamerule_delete' pk=rule.pk %}" class="btn btn-sm btn-danger">Delete</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="alert alert-info">
+                        No site name rules configured yet.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary">
+            Back to Configuration
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -27,12 +27,41 @@
                     </ul>
                 </div>
 
-                <div class="alert alert-warning">
-                    <strong>Warning:</strong> This operation may take several minutes depending on the size of your Meraki deployment.
-                </div>
-
                 <form method="post">
                     {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label class="form-label"><strong>Sync Mode</strong></label>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="sync_mode" id="mode_auto" value="auto" checked>
+                            <label class="form-check-label" for="mode_auto">
+                                <strong>Auto Sync</strong>
+                                <p class="text-muted small mb-0">All changes will be applied immediately to NetBox without review.</p>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="radio" name="sync_mode" id="mode_review" value="review">
+                            <label class="form-check-label" for="mode_review">
+                                <strong>Sync with Review</strong>
+                                <p class="text-muted small mb-0">Changes will be staged for review. You can approve or reject individual items before applying.</p>
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="radio" name="sync_mode" id="mode_dry_run" value="dry_run">
+                            <label class="form-check-label" for="mode_dry_run">
+                                <strong>Dry Run</strong>
+                                <p class="text-muted small mb-0">Preview all changes without applying anything. Useful for testing.</p>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>Warning:</strong> This operation may take several minutes depending on the size of your Meraki deployment.
+                    </div>
+
                     <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="mdi mdi-sync"></i> Start Synchronization

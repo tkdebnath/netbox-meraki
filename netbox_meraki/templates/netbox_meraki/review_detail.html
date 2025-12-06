@@ -1,0 +1,194 @@
+{% extends 'base/layout.html' %}
+{% load static %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Sync Review: {{ sync_log.timestamp }}</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:dashboard' %}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:review_list' %}">Reviews</a></li>
+                <li class="breadcrumb-item active">Review #{{ review.pk }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <strong>Review Status</strong>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <p><strong>Status:</strong> 
+                            {% if review.status == 'pending' %}
+                                <span class="badge bg-warning">{{ review.status|upper }}</span>
+                            {% elif review.status == 'approved' %}
+                                <span class="badge bg-success">{{ review.status|upper }}</span>
+                            {% elif review.status == 'rejected' %}
+                                <span class="badge bg-danger">{{ review.status|upper }}</span>
+                            {% elif review.status == 'partially_approved' %}
+                                <span class="badge bg-info">PARTIALLY APPROVED</span>
+                            {% elif review.status == 'applied' %}
+                                <span class="badge bg-primary">{{ review.status|upper }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Total Items:</strong> {{ review.items_total }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Approved:</strong> <span class="badge bg-success">{{ review.items_approved }}</span></p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Rejected:</strong> <span class="badge bg-danger">{{ review.items_rejected }}</span></p>
+                    </div>
+                </div>
+                
+                {% if review.status not in 'applied' %}
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="approve_all">
+                            <button type="submit" class="btn btn-success me-2">
+                                <i class="mdi mdi-check-all"></i> Approve All
+                            </button>
+                        </form>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="reject_all">
+                            <button type="submit" class="btn btn-danger me-2">
+                                <i class="mdi mdi-close-circle"></i> Reject All
+                            </button>
+                        </form>
+                        {% if review.items_approved > 0 %}
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="apply">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="mdi mdi-cloud-upload"></i> Apply Approved Changes
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <strong>Review Items</strong>
+            </div>
+            <div class="card-body">
+                {% if items %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Action</th>
+                                <th>Object</th>
+                                <th>Details</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>
+                                    {% if item.item_type == 'site' %}
+                                        <i class="mdi mdi-office-building"></i> Site
+                                    {% elif item.item_type == 'device' %}
+                                        <i class="mdi mdi-server"></i> Device
+                                    {% elif item.item_type == 'vlan' %}
+                                        <i class="mdi mdi-lan"></i> VLAN
+                                    {% elif item.item_type == 'prefix' %}
+                                        <i class="mdi mdi-ip-network"></i> Prefix
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.action_type == 'create' %}
+                                        <span class="badge bg-success">CREATE</span>
+                                    {% elif item.action_type == 'update' %}
+                                        <span class="badge bg-warning">UPDATE</span>
+                                    {% elif item.action_type == 'delete' %}
+                                        <span class="badge bg-danger">DELETE</span>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ item.object_name }}</strong></td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#details-{{ item.pk }}">
+                                        <i class="mdi mdi-eye"></i> View Details
+                                    </button>
+                                    <div class="collapse mt-2" id="details-{{ item.pk }}">
+                                        <div class="card card-body">
+                                            <h6>Proposed Data:</h6>
+                                            <pre class="bg-light p-2">{{ item.proposed_data_json|default:"N/A" }}</pre>
+                                            {% if item.current_data %}
+                                            <h6>Current Data:</h6>
+                                            <pre class="bg-light p-2">{{ item.current_data_json|default:"N/A" }}</pre>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if item.status == 'pending' %}
+                                        <span class="badge bg-warning">PENDING</span>
+                                    {% elif item.status == 'approved' %}
+                                        <span class="badge bg-success">APPROVED</span>
+                                    {% elif item.status == 'rejected' %}
+                                        <span class="badge bg-danger">REJECTED</span>
+                                    {% elif item.status == 'applied' %}
+                                        <span class="badge bg-primary">APPLIED</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status == 'pending' and review.status not in 'applied' %}
+                                    <form method="post" action="{% url 'plugins:netbox_meraki:review_item_action' pk=review.pk item_pk=item.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="approve">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Approve">
+                                            <i class="mdi mdi-check"></i>
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'plugins:netbox_meraki:review_item_action' pk=review.pk item_pk=item.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Reject">
+                                            <i class="mdi mdi-close"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No items in this review.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <a href="{% url 'plugins:netbox_meraki:review_list' %}" class="btn btn-secondary">
+            <i class="mdi mdi-arrow-left"></i> Back to Reviews
+        </a>
+    </div>
+</div>
+{% endblock %}

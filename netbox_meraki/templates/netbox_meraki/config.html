@@ -1,4 +1,5 @@
 {% extends 'base/layout.html' %}
+{% load static %}
 
 {% block content %}
 <div class="row">
@@ -8,53 +9,211 @@
 </div>
 
 <div class="row mt-4">
-    <div class="col-md-8 offset-md-2">
-        <div class="card">
-            <div class="card-header">
-                <strong>Plugin Settings</strong>
-            </div>
-            <div class="card-body">
-                <div class="alert alert-info">
-                    <strong>Note:</strong> Configuration is managed through NetBox's configuration file. 
-                    Edit your <code>configuration.py</code> or environment variables to change these settings.
+    <div class="col-md-12">
+        <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item">
+                <a class="nav-link active" data-bs-toggle="tab" href="#device-roles" role="tab">Device Role Mappings</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#site-rules" role="tab">Site Name Rules</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#static-config" role="tab">Static Configuration</a>
+            </li>
+        </ul>
+        
+        <div class="tab-content mt-3">
+            <!-- Device Role Mappings Tab -->
+            <div class="tab-pane fade show active" id="device-roles" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Device Role Mappings</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Configure which NetBox device role to use for each Meraki product type.</p>
+                        
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.mx_device_role.id_for_label }}" class="form-label">
+                                            <strong>MX Device Role</strong> <small class="text-muted">(Security Appliances)</small>
+                                        </label>
+                                        {{ form.mx_device_role }}
+                                        <small class="form-text text-muted">{{ form.mx_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.ms_device_role.id_for_label }}" class="form-label">
+                                            <strong>MS Device Role</strong> <small class="text-muted">(Switches)</small>
+                                        </label>
+                                        {{ form.ms_device_role }}
+                                        <small class="form-text text-muted">{{ form.ms_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.mr_device_role.id_for_label }}" class="form-label">
+                                            <strong>MR Device Role</strong> <small class="text-muted">(Wireless APs)</small>
+                                        </label>
+                                        {{ form.mr_device_role }}
+                                        <small class="form-text text-muted">{{ form.mr_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.mg_device_role.id_for_label }}" class="form-label">
+                                            <strong>MG Device Role</strong> <small class="text-muted">(Cellular Gateways)</small>
+                                        </label>
+                                        {{ form.mg_device_role }}
+                                        <small class="form-text text-muted">{{ form.mg_device_role.help_text }}</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.mv_device_role.id_for_label }}" class="form-label">
+                                            <strong>MV Device Role</strong> <small class="text-muted">(Cameras)</small>
+                                        </label>
+                                        {{ form.mv_device_role }}
+                                        <small class="form-text text-muted">{{ form.mv_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.mt_device_role.id_for_label }}" class="form-label">
+                                            <strong>MT Device Role</strong> <small class="text-muted">(Sensors)</small>
+                                        </label>
+                                        {{ form.mt_device_role }}
+                                        <small class="form-text text-muted">{{ form.mt_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.default_device_role.id_for_label }}" class="form-label">
+                                            <strong>Default Device Role</strong> <small class="text-muted">(Unknown Types)</small>
+                                        </label>
+                                        {{ form.default_device_role }}
+                                        <small class="form-text text-muted">{{ form.default_device_role.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <div class="form-check">
+                                            {{ form.auto_create_device_roles }}
+                                            <label class="form-check-label" for="{{ form.auto_create_device_roles.id_for_label }}">
+                                                Auto-create device roles if they don't exist
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">Save Settings</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
+            </div>
+            
+            <!-- Site Name Rules Tab -->
+            <div class="tab-pane fade" id="site-rules" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong>Site Name Transformation Rules</strong>
+                        <a href="{% url 'plugins:netbox_meraki:sitenamerule_add' %}" class="btn btn-sm btn-success">
+                            <i class="mdi mdi-plus"></i> Add Rule
+                        </a>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">
+                            Define rules to transform Meraki network names into NetBox site names using regular expressions.
+                            Rules are evaluated in priority order (lower numbers first).
+                        </p>
+                        
+                        {% if site_rules %}
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Priority</th>
+                                        <th>Name</th>
+                                        <th>Pattern</th>
+                                        <th>Template</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rule in site_rules %}
+                                        <tr>
+                                            <td>{{ rule.priority }}</td>
+                                            <td><strong>{{ rule.name }}</strong></td>
+                                            <td><code>{{ rule.regex_pattern }}</code></td>
+                                            <td><code>{{ rule.site_name_template }}</code></td>
+                                            <td>
+                                                {% if rule.enabled %}
+                                                    <span class="badge bg-success">Enabled</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">Disabled</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <a href="{% url 'plugins:netbox_meraki:sitenamerule_edit' pk=rule.pk %}" class="btn btn-sm btn-warning">Edit</a>
+                                                <a href="{% url 'plugins:netbox_meraki:sitenamerule_delete' pk=rule.pk %}" class="btn btn-sm btn-danger">Delete</a>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        {% else %}
+                            <div class="alert alert-info">
+                                No site name rules configured. Network names will be used as-is for site names.
+                            </div>
+                        {% endif %}
+                        
+                        <div class="alert alert-secondary mt-3">
+                            <strong>Example:</strong>
+                            <ul class="mb-0">
+                                <li><strong>Pattern:</strong> <code>^asia-south-(.+)-oil$</code></li>
+                                <li><strong>Template:</strong> <code>Asia South - {0} - Oil</code></li>
+                                <li><strong>Input:</strong> asia-south-mumbai-oil</li>
+                                <li><strong>Output:</strong> Asia South - mumbai - Oil</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Static Configuration Tab -->
+            <div class="tab-pane fade" id="static-config" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Static Plugin Configuration</strong>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> These settings are read from NetBox's configuration file and cannot be changed here.
+                            Edit your <code>configuration.py</code> or environment variables to change these settings.
+                        </div>
 
-                <table class="table table-striped">
-                    <tbody>
-                        {% for key, value in config.items %}
-                            <tr>
-                                <th style="width: 40%;">{{ key }}</th>
-                                <td>
-                                    {% if value is None %}
-                                        <span class="text-muted">Not set</span>
-                                    {% elif value == True %}
-                                        <span class="badge bg-success">Enabled</span>
-                                    {% elif value == False %}
-                                        <span class="badge bg-secondary">Disabled</span>
-                                    {% else %}
-                                        <code>{{ value }}</code>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-
-                <div class="alert alert-secondary">
-                    <strong>Configuration Example:</strong>
-                    <pre><code>PLUGINS_CONFIG = {
-    'netbox_meraki': {
-        'meraki_api_key': 'your-api-key-here',
-        'meraki_base_url': 'https://api.meraki.com/api/v1',
-        'sync_interval': 3600,
-        'auto_create_sites': True,
-        'auto_create_device_types': True,
-        'auto_create_device_roles': True,
-        'auto_create_manufacturers': True,
-        'default_device_role': 'Network Device',
-        'default_manufacturer': 'Cisco Meraki',
-    }
-}</code></pre>
+                        <table class="table table-striped">
+                            <tbody>
+                                {% for key, value in static_config.items %}
+                                    <tr>
+                                        <th style="width: 40%;">{{ key }}</th>
+                                        <td>
+                                            {% if value is None %}
+                                                <span class="text-muted">Not set</span>
+                                            {% elif value == True %}
+                                                <span class="badge bg-success">Enabled</span>
+                                            {% elif value == False %}
+                                                <span class="badge bg-secondary">Disabled</span>
+                                            {% else %}
+                                                <code>{{ value }}</code>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>

@@ -4,7 +4,7 @@
 
 ### 1. Prerequisites
 
-- NetBox 3.5.0 or higher
+- NetBox 4.4.x
 - Python 3.10+
 - Meraki Dashboard API access
 

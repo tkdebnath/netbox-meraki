@@ -14,7 +14,7 @@ from ipam.models import VLAN, VLANGroup, Prefix, IPAddress
 from extras.models import Tag
 
 from .meraki_client import MerakiAPIClient
-from .models import SyncLog
+from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
 
 
 logger = logging.getLogger('netbox_meraki')
@@ -23,10 +23,12 @@ logger = logging.getLogger('netbox_meraki')
 class MerakiSyncService:
     """Service for synchronizing Meraki data to NetBox"""
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, sync_mode: Optional[str] = None):
         """Initialize sync service"""
         self.client = MerakiAPIClient(api_key=api_key)
         self.sync_log = None
+        self.sync_mode = sync_mode or PluginSettings.get_settings().sync_mode
+        self.review = None
         self.stats = {
             'organizations': 0,
             'networks': 0,
@@ -45,11 +47,27 @@ class MerakiSyncService:
         """
         start_time = datetime.now()
         
+        # Determine status based on sync mode
+        if self.sync_mode == 'dry_run':
+            initial_status = 'dry_run'
+        elif self.sync_mode == 'review':
+            initial_status = 'pending_review'
+        else:
+            initial_status = 'running'
+        
         # Create sync log
         self.sync_log = SyncLog.objects.create(
-            status='running',
-            message='Starting synchronization...'
+            status=initial_status,
+            message=f'Starting synchronization ({self.sync_mode} mode)...',
+            sync_mode=self.sync_mode
         )
+        
+        # Create review session if needed
+        if self.sync_mode in ['review', 'dry_run']:
+            self.review = SyncReview.objects.create(
+                sync_log=self.sync_log,
+                status='pending'
+            )
         
         try:
             logger.info("Starting Meraki synchronization")
@@ -75,10 +93,20 @@ class MerakiSyncService:
             
             # Update sync log
             duration = (datetime.now() - start_time).total_seconds()
-            status = 'success' if not self.errors else 'partial' if self.stats['devices'] > 0 else 'failed'
+            
+            # Update status based on mode and results
+            if self.sync_mode == 'dry_run':
+                status = 'dry_run'
+                message = f"Dry run completed - {self.review.items_total if self.review else 0} items would be modified"
+            elif self.sync_mode == 'review':
+                status = 'pending_review'
+                message = f"Review ready - {self.review.items_total if self.review else 0} items pending approval"
+            else:
+                status = 'success' if not self.errors else 'partial' if self.stats['devices'] > 0 else 'failed'
+                message = f"Synchronized {self.stats['organizations']} organizations"
             
             self.sync_log.status = status
-            self.sync_log.message = f"Synchronized {self.stats['organizations']} organizations"
+            self.sync_log.message = message
             self.sync_log.organizations_synced = self.stats['organizations']
             self.sync_log.networks_synced = self.stats['networks']
             self.sync_log.devices_synced = self.stats['devices']
@@ -88,7 +116,12 @@ class MerakiSyncService:
             self.sync_log.duration_seconds = duration
             self.sync_log.save()
             
-            logger.info(f"Synchronization completed in {duration:.2f} seconds")
+            # Update review stats
+            if self.review:
+                self.review.items_total = self.review.items.count()
+                self.review.save()
+            
+            logger.info(f"Synchronization completed in {duration:.2f} seconds ({self.sync_mode} mode)")
             
         except Exception as e:
             logger.error(f"Synchronization failed: {str(e)}")
@@ -127,12 +160,17 @@ class MerakiSyncService:
         
         logger.info(f"Syncing network: {network_name}")
         
+        # Apply site name transformation rules
+        site_name = SiteNameRule.transform_network_name(network_name)
+        if site_name != network_name:
+            logger.info(f"Transformed site name: '{network_name}' -> '{site_name}'")
+        
         # Create or update site for this network
         site, created = Site.objects.update_or_create(
-            name=network_name,
+            name=site_name,
             defaults={
                 'description': f"Meraki Network - {org_name}",
-                'comments': f"Meraki Network ID: {network_id}\nTimezone: {network.get('timeZone', 'N/A')}",
+                'comments': f"Meraki Network ID: {network_id}\nOriginal Network Name: {network_name}\nTimezone: {network.get('timeZone', 'N/A')}",
             }
         )
         
@@ -175,8 +213,12 @@ class MerakiSyncService:
         serial = device['serial']
         name = device.get('name', serial)
         model = device.get('model', 'Unknown')
+        product_type = device.get('productType', '')
         
         logger.debug(f"Syncing device: {name} ({serial})")
+        
+        # Get plugin settings
+        plugin_settings = PluginSettings.get_settings()
         
         # Get or create manufacturer
         manufacturer, _ = Manufacturer.objects.get_or_create(
@@ -192,16 +234,69 @@ class MerakiSyncService:
             }
         )
         
+        # Get device role based on product type from settings
+        role_name = plugin_settings.get_device_role_for_product(product_type)
+        
         # Get or create device role
-        device_role, _ = DeviceRole.objects.get_or_create(
-            name='Network Device',
+        device_role, created = DeviceRole.objects.get_or_create(
+            name=role_name,
             defaults={
-                'slug': 'network-device',
+                'slug': role_name.lower().replace(' ', '-'),
                 'color': '2196f3',
             }
         )
         
-        # Create or update device
+        if created and plugin_settings.auto_create_device_roles:
+            logger.info(f"Created device role: {role_name}")
+        
+        # Prepare proposed data
+        proposed_data = {
+            'name': name,
+            'serial': serial,
+            'model': model,
+            'manufacturer': 'Cisco Meraki',
+            'role': role_name,
+            'site': site.name,
+            'status': 'active' if device.get('status') != 'offline' else 'offline',
+            'product_type': product_type,
+            'mac': device.get('mac', 'N/A'),
+            'lan_ip': device.get('lanIp', 'N/A'),
+            'firmware': device.get('firmware', 'N/A'),
+            'comments': f"MAC: {device.get('mac', 'N/A')}\\n"
+                       f"LAN IP: {device.get('lanIp', 'N/A')}\\n"
+                       f"Firmware: {device.get('firmware', 'N/A')}\\n"
+                       f"Product Type: {product_type}",
+        }
+        
+        # Check if device exists
+        existing_device = Device.objects.filter(serial=serial).first()
+        action_type = 'update' if existing_device else 'create'
+        current_data = None
+        
+        if existing_device:
+            current_data = {
+                'name': existing_device.name,
+                'serial': existing_device.serial,
+                'model': existing_device.device_type.model,
+                'role': existing_device.device_role.name,
+                'site': existing_device.site.name,
+                'status': existing_device.status,
+            }
+        
+        # If review or dry run mode, create review item instead of modifying
+        if self.sync_mode in ['review', 'dry_run']:
+            self._create_review_item(
+                item_type='device',
+                action_type=action_type,
+                object_name=name,
+                object_identifier=serial,
+                proposed_data=proposed_data,
+                current_data=current_data
+            )
+            logger.info(f"Created review item for device: {name} ({action_type})")
+            return
+        
+        # Auto mode - create or update device immediately
         netbox_device, created = Device.objects.update_or_create(
             serial=serial,
             defaults={
@@ -343,3 +438,99 @@ class MerakiSyncService:
                 
             except Exception as e:
                 logger.warning(f"Could not sync prefix {subnet}: {e}")
+    
+    def _create_review_item(self, item_type: str, action_type: str, object_name: str, 
+                           object_identifier: str, proposed_data: Dict, current_data: Optional[Dict] = None):
+        """Create a review item for manual approval"""
+        if not self.review:
+            return None
+        
+        return ReviewItem.objects.create(
+            review=self.review,
+            item_type=item_type,
+            action_type=action_type,
+            object_name=object_name,
+            object_identifier=object_identifier,
+            proposed_data=proposed_data,
+            current_data=current_data,
+            status='pending'
+        )
+    
+    def _should_execute(self) -> bool:
+        """Check if sync should actually modify database"""
+        return self.sync_mode == 'auto'
+    
+    def apply_review_item(self, item: 'ReviewItem'):
+        """Apply an approved review item"""
+        item_type = item.item_type
+        proposed_data = item.proposed_data
+        
+        try:
+            if item_type == 'site':
+                Site.objects.update_or_create(
+                    name=proposed_data['name'],
+                    defaults={
+                        'description': proposed_data.get('description', ''),
+                        'comments': proposed_data.get('comments', ''),
+                    }
+                )
+            elif item_type == 'device':
+                manufacturer, _ = Manufacturer.objects.get_or_create(
+                    name=proposed_data.get('manufacturer', 'Cisco Meraki')
+                )
+                device_type, _ = DeviceType.objects.get_or_create(
+                    model=proposed_data['model'],
+                    manufacturer=manufacturer,
+                    defaults={'slug': proposed_data['model'].lower().replace(' ', '-')}
+                )
+                device_role, _ = DeviceRole.objects.get_or_create(
+                    name=proposed_data['role'],
+                    defaults={
+                        'slug': proposed_data['role'].lower().replace(' ', '-'),
+                        'color': '2196f3'
+                    }
+                )
+                site = Site.objects.get(name=proposed_data['site'])
+                
+                Device.objects.update_or_create(
+                    serial=proposed_data['serial'],
+                    defaults={
+                        'name': proposed_data['name'],
+                        'device_type': device_type,
+                        'device_role': device_role,
+                        'site': site,
+                        'status': proposed_data.get('status', 'active'),
+                        'comments': proposed_data.get('comments', ''),
+                    }
+                )
+            elif item_type == 'vlan':
+                site = Site.objects.get(name=proposed_data['site'])
+                vlan_group, _ = VLANGroup.objects.get_or_create(
+                    name=f"{site.name} VLANs",
+                    defaults={'slug': f"{site.name.lower().replace(' ', '-')}-vlans"}
+                )
+                VLAN.objects.update_or_create(
+                    vid=proposed_data['vid'],
+                    group=vlan_group,
+                    defaults={
+                        'name': proposed_data['name'],
+                        'status': 'active',
+                        'description': proposed_data.get('description', ''),
+                    }
+                )
+            elif item_type == 'prefix':
+                site = Site.objects.get(name=proposed_data['site'])
+                Prefix.objects.update_or_create(
+                    prefix=proposed_data['prefix'],
+                    defaults={
+                        'site': site,
+                        'status': 'active',
+                        'description': proposed_data.get('description', ''),
+                    }
+                )
+            
+            logger.info(f"Applied review item: {item.action_type} {item.item_type} - {item.object_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to apply review item {item.id}: {e}")
+            raise

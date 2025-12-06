@@ -4,12 +4,14 @@ Views for NetBox Meraki plugin
 import logging
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.generic import View
+from django.views.generic import View, ListView, CreateView, UpdateView, DeleteView
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.conf import settings
+from django.urls import reverse_lazy
 
 from .sync_service import MerakiSyncService
-from .models import SyncLog
+from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
+from .forms import PluginSettingsForm, SiteNameRuleForm
 
 
 logger = logging.getLogger('netbox_meraki')
@@ -43,21 +45,42 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'dcim.add_device'
     
     def get(self, request):
+        plugin_settings = PluginSettings.get_settings()
         context = {
-            'title': 'Sync from Meraki'
+            'title': 'Sync from Meraki',
+            'sync_modes': [
+                ('auto', 'Auto Sync', 'Automatically apply all changes'),
+                ('review', 'Sync with Review', 'Review changes before applying'),
+                ('dry_run', 'Dry Run', 'Preview changes without applying'),
+            ],
+            'default_mode': plugin_settings.sync_mode,
         }
         return render(request, 'netbox_meraki/sync.html', context)
     
     def post(self, request):
+        sync_mode = request.POST.get('sync_mode', 'review')
+        
         try:
-            logger.info(f"Manual sync triggered by user {request.user}")
+            logger.info(f"Manual sync triggered by user {request.user} (mode: {sync_mode})")
             
-            # Start sync
-            sync_service = MerakiSyncService()
+            # Start sync with selected mode
+            sync_service = MerakiSyncService(sync_mode=sync_mode)
             sync_log = sync_service.sync_all()
             
-            # Show results
-            if sync_log.status == 'success':
+            # Show results based on mode
+            if sync_log.status == 'dry_run':
+                messages.info(
+                    request,
+                    f"Dry run completed. View the results to see what would be changed."
+                )
+                return redirect('plugins:netbox_meraki:synclog', pk=sync_log.pk)
+            elif sync_log.status == 'pending_review':
+                messages.info(
+                    request,
+                    f"Sync completed. {sync_log.review.items_total if hasattr(sync_log, 'review') else 0} items pending review."
+                )
+                return redirect('plugins:netbox_meraki:review_detail', pk=sync_log.review.pk)
+            elif sync_log.status == 'success':
                 messages.success(
                     request,
                     f"Synchronization completed successfully. "
@@ -100,18 +123,204 @@ class SyncLogView(LoginRequiredMixin, View):
 
 
 class ConfigView(LoginRequiredMixin, View):
-    """View to display plugin configuration"""
+    """View to display and edit plugin configuration"""
     
     def get(self, request):
+        settings_instance = PluginSettings.get_settings()
+        form = PluginSettingsForm(instance=settings_instance)
+        site_rules = SiteNameRule.objects.all()
+        
+        # Get static plugin configuration
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
         
         # Hide API key for security
         config_display = dict(plugin_config)
         if config_display.get('meraki_api_key'):
-            config_display['meraki_api_key'] = '****' + config_display['meraki_api_key'][-4:]
+            api_key = config_display['meraki_api_key']
+            config_display['meraki_api_key'] = '****' + api_key[-4:] if len(api_key) > 4 else '****'
         
         context = {
-            'config': config_display,
+            'form': form,
+            'settings': settings_instance,
+            'site_rules': site_rules,
+            'static_config': config_display,
         }
         
         return render(request, 'netbox_meraki/config.html', context)
+    
+    def post(self, request):
+        settings_instance = PluginSettings.get_settings()
+        form = PluginSettingsForm(request.POST, instance=settings_instance)
+        
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Settings updated successfully.')
+            return redirect('plugins:netbox_meraki:config')
+        
+        site_rules = SiteNameRule.objects.all()
+        plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
+        config_display = dict(plugin_config)
+        if config_display.get('meraki_api_key'):
+            api_key = config_display['meraki_api_key']
+            config_display['meraki_api_key'] = '****' + api_key[-4:] if len(api_key) > 4 else '****'
+        
+        context = {
+            'form': form,
+            'settings': settings_instance,
+            'site_rules': site_rules,
+            'static_config': config_display,
+        }
+        
+        return render(request, 'netbox_meraki/config.html', context)
+
+
+class SiteNameRuleListView(LoginRequiredMixin, ListView):
+    """List all site name rules"""
+    model = SiteNameRule
+    template_name = 'netbox_meraki/sitenamerule_list.html'
+    context_object_name = 'rules'
+    paginate_by = 50
+
+
+class SiteNameRuleCreateView(LoginRequiredMixin, CreateView):
+    """Create a new site name rule"""
+    model = SiteNameRule
+    form_class = SiteNameRuleForm
+    template_name = 'netbox_meraki/sitenamerule_form.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Site name rule "{form.instance.name}" created successfully.')
+        return super().form_valid(form)
+
+
+class SiteNameRuleUpdateView(LoginRequiredMixin, UpdateView):
+    """Edit an existing site name rule"""
+    model = SiteNameRule
+    form_class = SiteNameRuleForm
+    template_name = 'netbox_meraki/sitenamerule_form.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Site name rule "{form.instance.name}" updated successfully.')
+        return super().form_valid(form)
+
+
+class SiteNameRuleDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete a site name rule"""
+    model = SiteNameRule
+    template_name = 'netbox_meraki/sitenamerule_confirm_delete.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def delete(self, request, *args, **kwargs):
+        rule = self.get_object()
+        messages.success(request, f'Site name rule "{rule.name}" deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+
+class ReviewDetailView(LoginRequiredMixin, View):
+    """View sync review details"""
+    
+    def get(self, request, pk):
+        review = get_object_or_404(SyncReview, pk=pk)
+        items = review.items.all()
+        
+        # Group items by type and action
+        items_by_type = {}
+        for item in items:
+            key = f"{item.item_type}_{item.action_type}"
+            if key not in items_by_type:
+                items_by_type[key] = []
+            items_by_type[key].append(item)
+        
+        context = {
+            'review': review,
+            'items': items,
+            'items_by_type': items_by_type,
+            'sync_log': review.sync_log,
+        }
+        
+        return render(request, 'netbox_meraki/review_detail.html', context)
+    
+    def post(self, request, pk):
+        review = get_object_or_404(SyncReview, pk=pk)
+        action = request.POST.get('action')
+        
+        if action == 'approve_all':
+            review.items.update(status='approved')
+            review.status = 'approved'
+            review.items_approved = review.items.count()
+            review.save()
+            messages.success(request, 'All items approved.')
+            
+        elif action == 'reject_all':
+            review.items.update(status='rejected')
+            review.status='rejected'
+            review.items_rejected = review.items.count()
+            review.save()
+            messages.info(request, 'All items rejected.')
+            
+        elif action == 'apply':
+            if review.status not in ['approved', 'partially_approved']:
+                messages.error(request, 'Cannot apply changes without approval.')
+                return redirect('plugins:netbox_meraki:review_detail', pk=pk)
+            
+            try:
+                review.apply_approved_items()
+                messages.success(request, f'Applied {review.items_approved} approved items.')
+                return redirect('plugins:netbox_meraki:synclog', pk=review.sync_log.pk)
+            except Exception as e:
+                messages.error(request, f'Error applying changes: {str(e)}')
+        
+        return redirect('plugins:netbox_meraki:review_detail', pk=pk)
+
+
+class ReviewItemActionView(LoginRequiredMixin, View):
+    """Approve or reject individual review items"""
+    
+    def post(self, request, pk, item_pk):
+        review = get_object_or_404(SyncReview, pk=pk)
+        item = get_object_or_404(ReviewItem, pk=item_pk, review=review)
+        action = request.POST.get('action')
+        
+        if action == 'approve':
+            item.status = 'approved'
+            item.save()
+            review.items_approved = review.items.filter(status='approved').count()
+            review.items_rejected = review.items.filter(status='rejected').count()
+            
+            # Update review status
+            if review.items_approved > 0 and review.items_rejected > 0:
+                review.status = 'partially_approved'
+            elif review.items_approved == review.items_total:
+                review.status = 'approved'
+            review.save()
+            
+            messages.success(request, f'Approved: {item.object_name}')
+            
+        elif action == 'reject':
+            item.status = 'rejected'
+            item.notes = request.POST.get('notes', '')
+            item.save()
+            review.items_approved = review.items.filter(status='approved').count()
+            review.items_rejected = review.items.filter(status='rejected').count()
+            
+            # Update review status
+            if review.items_rejected == review.items_total:
+                review.status = 'rejected'
+            elif review.items_approved > 0:
+                review.status = 'partially_approved'
+            review.save()
+            
+            messages.info(request, f'Rejected: {item.object_name}')
+        
+        return redirect('plugins:netbox_meraki:review_detail', pk=pk)
+
+
+class ReviewListView(LoginRequiredMixin, ListView):
+    """List all sync reviews"""
+    model = SyncReview
+    template_name = 'netbox_meraki/review_list.html'
+    context_object_name = 'reviews'
+    paginate_by = 50
+    ordering = ['-created']

@@ -5,7 +5,7 @@ class MerakiConfig(PluginConfig):
     name = 'netbox_meraki'
     verbose_name = 'NetBox Meraki Sync'
     description = 'Synchronize Meraki networks, devices, VLANs, and prefixes to NetBox'
-    version = '0.1.0'
+    version = '0.2.0'
     author = 'NetBox Meraki Team'
     author_email = 'support@example.com'
     base_url = 'meraki'
@@ -20,10 +20,10 @@ class MerakiConfig(PluginConfig):
         'auto_create_manufacturers': True,
         'default_site_group': None,
         'default_device_role': 'Network Device',
-        'default_manufacturer': 'Cisco Meraki',
+    default_manufacturer = 'Cisco Meraki',
     }
-    min_version = '3.5.0'
-    max_version = '4.0.0'
+    min_version = '4.4.0'
+    max_version = '4.4.99'
 
 
 config = MerakiConfig

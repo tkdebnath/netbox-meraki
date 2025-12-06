@@ -9,7 +9,7 @@ A fully functional NetBox plugin that provides one-way synchronization from Cisc
 - **Plugin Configuration** (`__init__.py`)
   - PluginConfig with metadata
   - Default settings for API access and behavior
-  - Version compatibility (NetBox 3.5.0 - 4.0.0)
+  - Version compatibility (NetBox 4.4.x)
 
 - **Database Models** (`models.py`)
   - SyncLog model for tracking synchronization history
