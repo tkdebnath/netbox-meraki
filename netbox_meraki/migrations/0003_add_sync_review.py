@@ -59,6 +59,8 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created', models.DateTimeField(auto_now_add=True)),
+                ('reviewed', models.DateTimeField(null=True, blank=True)),
+                ('reviewed_by', models.CharField(max_length=100, blank=True)),
                 ('status', models.CharField(
                     max_length=20,
                     choices=[
@@ -98,6 +100,8 @@ class Migration(migrations.Migration):
                         ('device', 'Device'),
                         ('vlan', 'VLAN'),
                         ('prefix', 'Prefix'),
+                        ('interface', 'Interface'),
+                        ('ip_address', 'IP Address'),
                     ]
                 )),
                 ('action_type', models.CharField(
@@ -105,12 +109,16 @@ class Migration(migrations.Migration):
                     choices=[
                         ('create', 'Create'),
                         ('update', 'Update'),
-                        ('delete', 'Delete'),
+                        ('skip', 'Skip (Already Exists)'),
                     ]
                 )),
                 ('object_name', models.CharField(max_length=255)),
-                ('proposed_data', models.JSONField()),
-                ('current_data', models.JSONField(null=True, blank=True)),
+                ('object_identifier', models.CharField(
+                    max_length=255,
+                    help_text='Serial number, network ID, or other unique identifier'
+                )),
+                ('current_data', models.JSONField(null=True, blank=True, help_text='Current data in NetBox (for updates)')),
+                ('proposed_data', models.JSONField(help_text='Data to be synced from Meraki')),
                 ('status', models.CharField(
                     max_length=20,
                     choices=[
@@ -118,9 +126,11 @@ class Migration(migrations.Migration):
                         ('approved', 'Approved'),
                         ('rejected', 'Rejected'),
                         ('applied', 'Applied'),
+                        ('failed', 'Failed'),
                     ],
                     default='pending'
                 )),
+                ('error_message', models.TextField(blank=True)),
                 ('notes', models.TextField(blank=True)),
                 ('review', models.ForeignKey(
                     on_delete=django.db.models.deletion.CASCADE,
