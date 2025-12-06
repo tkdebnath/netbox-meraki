@@ -20,7 +20,7 @@ class MerakiConfig(PluginConfig):
         'auto_create_manufacturers': True,
         'default_site_group': None,
         'default_device_role': 'Network Device',
-    default_manufacturer = 'Cisco Meraki',
+        'default_manufacturer': 'Cisco Meraki',
     }
     min_version = '4.4.0'
     max_version = '4.4.99'
