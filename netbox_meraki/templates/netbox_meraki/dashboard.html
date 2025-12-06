@@ -1,0 +1,131 @@
+{% extends 'base/layout.html' %}
+{% load static %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Meraki Sync Dashboard</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <strong>Configuration Status</strong>
+            </div>
+            <div class="card-body">
+                {% if api_key_configured %}
+                    <span class="badge bg-success">API Key Configured</span>
+                {% else %}
+                    <span class="badge bg-danger">API Key Not Configured</span>
+                    <p class="mt-2 text-muted">Configure the Meraki API key in NetBox configuration.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <strong>Latest Sync</strong>
+            </div>
+            <div class="card-body">
+                {% if latest_sync %}
+                    <p><strong>Time:</strong> {{ latest_sync.timestamp }}</p>
+                    <p><strong>Status:</strong> 
+                        <span class="badge bg-success">{{ latest_sync.status }}</span>
+                    </p>
+                    <p><strong>Devices:</strong> {{ latest_sync.devices_synced }}</p>
+                    <p><strong>VLANs:</strong> {{ latest_sync.vlans_synced }}</p>
+                    <p><strong>Prefixes:</strong> {{ latest_sync.prefixes_synced }}</p>
+                {% else %}
+                    <p class="text-muted">No synchronization performed yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <strong>Quick Actions</strong>
+            </div>
+            <div class="card-body">
+                <a href="{% url 'plugins:netbox_meraki:sync' %}" class="btn btn-primary btn-block mb-2">
+                    <i class="mdi mdi-sync"></i> Sync Now
+                </a>
+                <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary btn-block">
+                    <i class="mdi mdi-cog"></i> View Configuration
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <strong>Recent Sync Logs</strong>
+            </div>
+            <div class="card-body">
+                {% if recent_logs %}
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Status</th>
+                                <th>Organizations</th>
+                                <th>Networks</th>
+                                <th>Devices</th>
+                                <th>VLANs</th>
+                                <th>Prefixes</th>
+                                <th>Duration</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_logs %}
+                                <tr>
+                                    <td>{{ log.timestamp }}</td>
+                                    <td>
+                                        {% if log.status == 'success' %}
+                                            <span class="badge bg-success">{{ log.status }}</span>
+                                        {% elif log.status == 'partial' %}
+                                            <span class="badge bg-warning">{{ log.status }}</span>
+                                        {% elif log.status == 'failed' %}
+                                            <span class="badge bg-danger">{{ log.status }}</span>
+                                        {% else %}
+                                            <span class="badge bg-info">{{ log.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.organizations_synced }}</td>
+                                    <td>{{ log.networks_synced }}</td>
+                                    <td>{{ log.devices_synced }}</td>
+                                    <td>{{ log.vlans_synced }}</td>
+                                    <td>{{ log.prefixes_synced }}</td>
+                                    <td>
+                                        {% if log.duration_seconds %}
+                                            {{ log.duration_seconds|floatformat:2 }}s
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'plugins:netbox_meraki:synclog' pk=log.pk %}" class="btn btn-sm btn-primary">
+                                            View Details
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="text-muted">No sync logs available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

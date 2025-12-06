@@ -1,0 +1,39 @@
+[project]
+name = "netbox-meraki"
+version = "0.1.0"
+description = "NetBox plugin for synchronizing Cisco Meraki Dashboard networks, devices, VLANs, and prefixes"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+]
+authors = [
+    { name = "NetBox Meraki Team", email = "support@example.com" }
+]
+keywords = ["netbox", "meraki", "cisco", "plugin", "network", "automation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Django",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/netbox-meraki"
+Documentation = "https://github.com/yourusername/netbox-meraki/blob/main/README.md"
+Repository = "https://github.com/yourusername/netbox-meraki"
+Issues = "https://github.com/yourusername/netbox-meraki/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["netbox_meraki*"]
+
+[tool.setuptools.package-data]
+netbox_meraki = ["templates/**/*.html"]

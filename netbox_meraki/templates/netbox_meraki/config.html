@@ -1,0 +1,71 @@
+{% extends 'base/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Meraki Plugin Configuration</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header">
+                <strong>Plugin Settings</strong>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <strong>Note:</strong> Configuration is managed through NetBox's configuration file. 
+                    Edit your <code>configuration.py</code> or environment variables to change these settings.
+                </div>
+
+                <table class="table table-striped">
+                    <tbody>
+                        {% for key, value in config.items %}
+                            <tr>
+                                <th style="width: 40%;">{{ key }}</th>
+                                <td>
+                                    {% if value is None %}
+                                        <span class="text-muted">Not set</span>
+                                    {% elif value == True %}
+                                        <span class="badge bg-success">Enabled</span>
+                                    {% elif value == False %}
+                                        <span class="badge bg-secondary">Disabled</span>
+                                    {% else %}
+                                        <code>{{ value }}</code>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="alert alert-secondary">
+                    <strong>Configuration Example:</strong>
+                    <pre><code>PLUGINS_CONFIG = {
+    'netbox_meraki': {
+        'meraki_api_key': 'your-api-key-here',
+        'meraki_base_url': 'https://api.meraki.com/api/v1',
+        'sync_interval': 3600,
+        'auto_create_sites': True,
+        'auto_create_device_types': True,
+        'auto_create_device_roles': True,
+        'auto_create_manufacturers': True,
+        'default_device_role': 'Network Device',
+        'default_manufacturer': 'Cisco Meraki',
+    }
+}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <a href="{% url 'plugins:netbox_meraki:dashboard' %}" class="btn btn-secondary">
+            Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
