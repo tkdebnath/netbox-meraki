@@ -193,13 +193,23 @@
 <div class="row mt-4">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>Live Progress Logs</strong>
-                {% if sync_log.status == 'running' %}
-                <button id="auto-refresh-toggle" class="btn btn-sm btn-primary float-end" onclick="toggleAutoRefresh()">
-                    <i class="mdi mdi-pause"></i> Pause Auto-Refresh
-                </button>
-                {% endif %}
+                <div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" id="auto-scroll-toggle" 
+                               {% if sync_log.status == 'running' %}checked{% endif %}
+                               onchange="toggleAutoScroll()">
+                        <label class="form-check-label" for="auto-scroll-toggle">
+                            Enable Live Scrolling (2s)
+                        </label>
+                    </div>
+                    {% if sync_log.status == 'running' %}
+                    <button id="auto-refresh-toggle" class="btn btn-sm btn-primary" onclick="toggleAutoRefresh()">
+                        <i class="mdi mdi-pause"></i> Pause Auto-Refresh
+                    </button>
+                    {% endif %}
+                </div>
             </div>
             <div class="card-body">
                 <div id="progress-logs" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9em; background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
@@ -239,7 +249,23 @@
 {% if sync_log.status == 'running' %}
 <script>
 let autoRefresh = true;
+let autoScroll = true;
 let refreshInterval;
+
+function toggleAutoScroll() {
+    const checkbox = document.getElementById('auto-scroll-toggle');
+    autoScroll = checkbox.checked;
+    
+    if (autoScroll) {
+        if (!refreshInterval) {
+            startAutoRefresh();
+        }
+    } else {
+        if (refreshInterval && !autoRefresh) {
+            stopAutoRefresh();
+        }
+    }
+}
 
 function toggleAutoRefresh() {
     autoRefresh = !autoRefresh;
@@ -249,17 +275,22 @@ function toggleAutoRefresh() {
         startAutoRefresh();
     } else {
         btn.innerHTML = '<i class="mdi mdi-play"></i> Resume Auto-Refresh';
-        stopAutoRefresh();
+        if (!autoScroll) {
+            stopAutoRefresh();
+        }
     }
 }
 
 function startAutoRefresh() {
-    refreshInterval = setInterval(fetchProgress, 3000);  // Refresh every 3 seconds
+    if (!refreshInterval) {
+        refreshInterval = setInterval(fetchProgress, 2000);  // Refresh every 2 seconds
+    }
 }
 
 function stopAutoRefresh() {
     if (refreshInterval) {
         clearInterval(refreshInterval);
+        refreshInterval = null;
     }
 }
 
@@ -305,8 +336,10 @@ function fetchProgress() {
                         logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${levelBadge} <span>${log.message}</span>`;
                         logsContainer.appendChild(logEntry);
                     });
-                    // Auto-scroll to bottom
-                    logsContainer.scrollTop = logsContainer.scrollHeight;
+                    // Auto-scroll to bottom if enabled
+                    if (autoScroll) {
+                        logsContainer.scrollTop = logsContainer.scrollHeight;
+                    }
                 }
             }
             
@@ -357,8 +390,80 @@ function getCookie(name) {
     return cookieValue;
 }
 
-// Start auto-refresh on page load
-startAutoRefresh();
+// Start auto-refresh on page load if checkbox is checked
+const checkbox = document.getElementById('auto-scroll-toggle');
+if (checkbox && checkbox.checked) {
+    startAutoRefresh();
+}
+</script>
+{% else %}
+<script>
+// For completed syncs, add live scrolling option
+let autoScroll = false;
+let refreshInterval = null;
+
+function toggleAutoScroll() {
+    const checkbox = document.getElementById('auto-scroll-toggle');
+    autoScroll = checkbox.checked;
+    
+    if (autoScroll) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    if (!refreshInterval) {
+        refreshInterval = setInterval(fetchProgress, 2000);  // Refresh every 2 seconds
+    }
+}
+
+function stopAutoRefresh() {
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+}
+
+function fetchProgress() {
+    fetch('{% url "plugins:netbox_meraki:sync_progress_api" sync_log.id %}')
+        .then(response => response.json())
+        .then(data => {
+            // Update progress logs
+            if (data.progress_logs && data.progress_logs.length > 0) {
+                const logsContainer = document.getElementById('progress-logs');
+                if (logsContainer) {
+                    const currentScrollPos = logsContainer.scrollTop;
+                    const isScrolledToBottom = logsContainer.scrollHeight - logsContainer.clientHeight <= currentScrollPos + 1;
+                    
+                    logsContainer.innerHTML = '';
+                    data.progress_logs.forEach(log => {
+                        const logEntry = document.createElement('div');
+                        logEntry.className = 'log-entry';
+                        
+                        const timestamp = log.timestamp.substring(0, 19);
+                        const levelBadge = log.level === 'error' ? 
+                            '<span class="badge bg-danger">ERROR</span>' :
+                            log.level === 'warning' ?
+                            '<span class="badge bg-warning">WARN</span>' :
+                            '<span class="badge bg-info">INFO</span>';
+                        
+                        logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${levelBadge} <span>${log.message}</span>`;
+                        logsContainer.appendChild(logEntry);
+                    });
+                    
+                    // Auto-scroll to bottom if user was already at bottom or if auto-scroll is enabled
+                    if (isScrolledToBottom || autoScroll) {
+                        logsContainer.scrollTop = logsContainer.scrollHeight;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching progress:', error);
+        });
+}
 </script>
 {% endif %}
 {% endblock %}

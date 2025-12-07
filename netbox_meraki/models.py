@@ -151,6 +151,13 @@ class PluginSettings(models.Model):
         help_text='Comma-separated list of tags to apply to prefixes/subnets (e.g., "Meraki,Subnet")'
     )
     
+    # Site Name Rule Settings
+    process_unmatched_sites = models.BooleanField(
+        default=True,
+        verbose_name='Process Sites Not Matching Name Rules',
+        help_text='If enabled, sites that do not match any name rules will still be processed using their original network name. If disabled, only sites matching name rules will be synced.'
+    )
+    
     # Scheduling Settings
     enable_scheduled_sync = models.BooleanField(
         default=False,
@@ -392,8 +399,15 @@ class SiteNameRule(models.Model):
         return network_name
     
     @classmethod
-    def transform_network_name(cls, network_name: str) -> str:
-        """Apply all enabled rules to transform a network name"""
+    def transform_network_name(cls, network_name: str):
+        """Apply all enabled rules to transform a network name
+        
+        Returns:
+            Transformed name if a rule matches, original name if process_unmatched_sites is True,
+            or None if no rules match and process_unmatched_sites is False
+        """
+        from .models import PluginSettings
+        
         rules = cls.objects.filter(enabled=True).order_by('priority')
         
         for rule in rules:
@@ -402,7 +416,190 @@ class SiteNameRule(models.Model):
                 logger.info(f"Applied rule '{rule.name}': '{network_name}' -> '{transformed}'")
                 return transformed
         
-        return network_name
+        # No rules matched - check if we should process unmatched sites
+        settings = PluginSettings.get_settings()
+        if settings.process_unmatched_sites:
+            return network_name
+        else:
+            logger.info(f"Skipping site '{network_name}' - does not match any name rules and process_unmatched_sites is disabled")
+            return None
+
+
+class PrefixFilterRule(models.Model):
+    """Rules for filtering prefixes during sync"""
+    
+    FILTER_TYPE_CHOICES = [
+        ('exclude', 'Exclude Matching Prefixes'),
+        ('include_only', 'Include Only Matching Prefixes'),
+    ]
+    
+    PREFIX_LENGTH_CHOICES = [
+        ('exact', 'Exact Length'),
+        ('greater', 'Greater Than'),
+        ('less', 'Less Than'),
+        ('range', 'Range'),
+    ]
+    
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text='Descriptive name for this filter rule'
+    )
+    filter_type = models.CharField(
+        max_length=20,
+        choices=FILTER_TYPE_CHOICES,
+        default='exclude',
+        verbose_name='Filter Type',
+        help_text='Whether to exclude or include only matching prefixes'
+    )
+    prefix_pattern = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Prefix Pattern',
+        help_text='Prefix pattern to match (e.g., "192.168.0.0/16", "10.0.0.0/8"). Leave blank to match all prefixes.'
+    )
+    prefix_length_filter = models.CharField(
+        max_length=20,
+        choices=PREFIX_LENGTH_CHOICES,
+        default='exact',
+        verbose_name='Prefix Length Filter',
+        help_text='How to filter by prefix length'
+    )
+    min_prefix_length = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Minimum Prefix Length',
+        help_text='Minimum prefix length (1-32 for IPv4, 1-128 for IPv6). Used for "greater", "less", and "range" filters.'
+    )
+    max_prefix_length = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Maximum Prefix Length',
+        help_text='Maximum prefix length (1-32 for IPv4, 1-128 for IPv6). Used for "range" filter only.'
+    )
+    priority = models.IntegerField(
+        default=100,
+        help_text='Rule priority (lower values are evaluated first)'
+    )
+    enabled = models.BooleanField(
+        default=True,
+        help_text='Enable or disable this rule'
+    )
+    description = models.TextField(
+        blank=True,
+        help_text='Optional description of what this rule does'
+    )
+    
+    class Meta:
+        ordering = ['priority', 'name']
+        verbose_name = 'Prefix Filter Rule'
+        verbose_name_plural = 'Prefix Filter Rules'
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_filter_type_display()}, Priority: {self.priority})"
+    
+    def clean(self):
+        """Validate rule configuration"""
+        from ipaddress import ip_network, AddressValueError
+        
+        # Validate prefix pattern if provided
+        if self.prefix_pattern:
+            try:
+                ip_network(self.prefix_pattern, strict=False)
+            except (AddressValueError, ValueError) as e:
+                raise ValidationError({
+                    'prefix_pattern': f'Invalid prefix pattern: {str(e)}'
+                })
+        
+        # Validate prefix length values
+        if self.prefix_length_filter in ['greater', 'less', 'range']:
+            if self.min_prefix_length is None:
+                raise ValidationError({
+                    'min_prefix_length': 'Minimum prefix length is required for this filter type'
+                })
+            if self.min_prefix_length < 1 or self.min_prefix_length > 128:
+                raise ValidationError({
+                    'min_prefix_length': 'Prefix length must be between 1 and 128'
+                })
+        
+        if self.prefix_length_filter == 'range':
+            if self.max_prefix_length is None:
+                raise ValidationError({
+                    'max_prefix_length': 'Maximum prefix length is required for range filter'
+                })
+            if self.max_prefix_length < 1 or self.max_prefix_length > 128:
+                raise ValidationError({
+                    'max_prefix_length': 'Prefix length must be between 1 and 128'
+                })
+            if self.min_prefix_length and self.max_prefix_length and self.min_prefix_length > self.max_prefix_length:
+                raise ValidationError({
+                    'max_prefix_length': 'Maximum prefix length must be greater than or equal to minimum'
+                })
+    
+    def matches(self, prefix_str: str) -> bool:
+        """Check if a prefix matches this rule"""
+        from ipaddress import ip_network
+        
+        if not self.enabled:
+            return False
+        
+        try:
+            prefix = ip_network(prefix_str, strict=False)
+            
+            # Check prefix pattern match
+            if self.prefix_pattern:
+                pattern = ip_network(self.prefix_pattern, strict=False)
+                # Check if prefix is within the pattern network
+                if not (prefix.subnet_of(pattern) or prefix == pattern):
+                    return False
+            
+            # Check prefix length filter
+            if self.prefix_length_filter == 'exact':
+                if self.min_prefix_length and prefix.prefixlen != self.min_prefix_length:
+                    return False
+            elif self.prefix_length_filter == 'greater':
+                if self.min_prefix_length and prefix.prefixlen <= self.min_prefix_length:
+                    return False
+            elif self.prefix_length_filter == 'less':
+                if self.min_prefix_length and prefix.prefixlen >= self.min_prefix_length:
+                    return False
+            elif self.prefix_length_filter == 'range':
+                if self.min_prefix_length and prefix.prefixlen < self.min_prefix_length:
+                    return False
+                if self.max_prefix_length and prefix.prefixlen > self.max_prefix_length:
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error checking prefix filter rule {self.name} for {prefix_str}: {e}")
+            return False
+    
+    @classmethod
+    def should_sync_prefix(cls, prefix_str: str) -> bool:
+        """Determine if a prefix should be synced based on all enabled rules"""
+        rules = cls.objects.filter(enabled=True).order_by('priority')
+        
+        if not rules.exists():
+            return True  # No rules = sync all prefixes
+        
+        # Check exclude rules first
+        for rule in rules.filter(filter_type='exclude'):
+            if rule.matches(prefix_str):
+                logger.info(f"Prefix {prefix_str} excluded by rule '{rule.name}'")
+                return False
+        
+        # Check include_only rules
+        include_rules = rules.filter(filter_type='include_only')
+        if include_rules.exists():
+            for rule in include_rules:
+                if rule.matches(prefix_str):
+                    return True
+            # No include_only rules matched
+            logger.info(f"Prefix {prefix_str} does not match any include_only rules")
+            return False
+        
+        return True  # Passed all checks
 
 
 class SyncLog(models.Model):

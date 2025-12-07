@@ -10,8 +10,8 @@ from django.conf import settings
 from django.urls import reverse_lazy
 
 from .sync_service import MerakiSyncService
-from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
-from .forms import PluginSettingsForm, SiteNameRuleForm
+from .models import SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, SyncReview, ReviewItem
+from .forms import PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm
 
 
 logger = logging.getLogger('netbox_meraki')
@@ -129,6 +129,7 @@ class ConfigView(LoginRequiredMixin, View):
         settings_instance = PluginSettings.get_settings()
         form = PluginSettingsForm(instance=settings_instance)
         site_rules = SiteNameRule.objects.all()
+        prefix_filter_rules = PrefixFilterRule.objects.all()
         
         # Get static plugin configuration
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
@@ -143,6 +144,7 @@ class ConfigView(LoginRequiredMixin, View):
             'form': form,
             'settings': settings_instance,
             'site_rules': site_rules,
+            'prefix_filter_rules': prefix_filter_rules,
             'static_config': config_display,
         }
         
@@ -158,6 +160,7 @@ class ConfigView(LoginRequiredMixin, View):
             return redirect('plugins:netbox_meraki:config')
         
         site_rules = SiteNameRule.objects.all()
+        prefix_filter_rules = PrefixFilterRule.objects.all()
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
         config_display = dict(plugin_config)
         if config_display.get('meraki_api_key'):
@@ -168,6 +171,7 @@ class ConfigView(LoginRequiredMixin, View):
             'form': form,
             'settings': settings_instance,
             'site_rules': site_rules,
+            'prefix_filter_rules': prefix_filter_rules,
             'static_config': config_display,
         }
         
@@ -215,6 +219,50 @@ class SiteNameRuleDeleteView(LoginRequiredMixin, DeleteView):
     def delete(self, request, *args, **kwargs):
         rule = self.get_object()
         messages.success(request, f'Site name rule "{rule.name}" deleted successfully.')
+        return super().delete(request, *args, **kwargs)
+
+
+class PrefixFilterRuleListView(LoginRequiredMixin, ListView):
+    """List all prefix filter rules"""
+    model = PrefixFilterRule
+    template_name = 'netbox_meraki/prefixfilterrule_list.html'
+    context_object_name = 'rules'
+    paginate_by = 50
+
+
+class PrefixFilterRuleCreateView(LoginRequiredMixin, CreateView):
+    """Create a new prefix filter rule"""
+    model = PrefixFilterRule
+    form_class = PrefixFilterRuleForm
+    template_name = 'netbox_meraki/prefixfilterrule_form.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Prefix filter rule "{form.instance.name}" created successfully.')
+        return super().form_valid(form)
+
+
+class PrefixFilterRuleUpdateView(LoginRequiredMixin, UpdateView):
+    """Edit an existing prefix filter rule"""
+    model = PrefixFilterRule
+    form_class = PrefixFilterRuleForm
+    template_name = 'netbox_meraki/prefixfilterrule_form.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Prefix filter rule "{form.instance.name}" updated successfully.')
+        return super().form_valid(form)
+
+
+class PrefixFilterRuleDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete a prefix filter rule"""
+    model = PrefixFilterRule
+    template_name = 'netbox_meraki/prefixfilterrule_confirm_delete.html'
+    success_url = reverse_lazy('plugins:netbox_meraki:config')
+    
+    def delete(self, request, *args, **kwargs):
+        rule = self.get_object()
+        messages.success(request, f'Prefix filter rule "{rule.name}" deleted successfully.')
         return super().delete(request, *args, **kwargs)
 
 

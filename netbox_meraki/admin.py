@@ -2,7 +2,7 @@
 Admin configuration for NetBox Meraki plugin
 """
 from django.contrib import admin
-from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
+from .models import SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, SyncReview, ReviewItem
 
 
 @admin.register(SyncLog)
@@ -90,6 +90,37 @@ class SiteNameRuleAdmin(admin.ModelAdmin):
         }),
         ('Transformation Rule', {
             'fields': ('regex_pattern', 'site_name_template', 'description')
+        }),
+    )
+
+
+@admin.register(PrefixFilterRule)
+class PrefixFilterRuleAdmin(admin.ModelAdmin):
+    list_display = [
+        'name',
+        'priority',
+        'enabled',
+        'filter_type',
+        'prefix_pattern',
+        'prefix_length_filter',
+    ]
+    list_filter = ['enabled', 'filter_type', 'prefix_length_filter']
+    list_editable = ['enabled', 'priority']
+    ordering = ['priority', 'name']
+    search_fields = ['name', 'prefix_pattern', 'description']
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'enabled', 'priority')
+        }),
+        ('Filter Configuration', {
+            'fields': (
+                'filter_type',
+                'prefix_pattern',
+                'prefix_length_filter',
+                'min_prefix_length',
+                'max_prefix_length',
+                'description'
+            )
         }),
     )
 

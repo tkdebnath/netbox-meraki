@@ -2,7 +2,7 @@
 Forms for NetBox Meraki plugin
 """
 from django import forms
-from .models import PluginSettings, SiteNameRule
+from .models import PluginSettings, SiteNameRule, PrefixFilterRule
 
 
 class PluginSettingsForm(forms.ModelForm):
@@ -28,6 +28,7 @@ class PluginSettingsForm(forms.ModelForm):
             'device_tags',
             'vlan_tags',
             'prefix_tags',
+            'process_unmatched_sites',
             'enable_scheduled_sync',
             'sync_interval_minutes',
             'scheduled_sync_mode',
@@ -55,6 +56,7 @@ class PluginSettingsForm(forms.ModelForm):
             'device_tags': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Meraki,Network-Device'}),
             'vlan_tags': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Meraki,VLAN'}),
             'prefix_tags': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Meraki,Subnet'}),
+            'process_unmatched_sites': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'enable_scheduled_sync': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'scheduled_sync_mode': forms.Select(attrs={'class': 'form-select'}),
             'enable_api_throttling': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -95,3 +97,36 @@ class SiteNameRuleForm(forms.ModelForm):
             'site_name_template': forms.TextInput(attrs={'placeholder': 'Asia South - {0} - Oil'}),
             'description': forms.Textarea(attrs={'rows': 3}),
         }
+
+
+class PrefixFilterRuleForm(forms.ModelForm):
+    """Form for creating/editing prefix filter rules"""
+    
+    class Meta:
+        model = PrefixFilterRule
+        fields = [
+            'name',
+            'filter_type',
+            'prefix_pattern',
+            'prefix_length_filter',
+            'min_prefix_length',
+            'max_prefix_length',
+            'priority',
+            'enabled',
+            'description',
+        ]
+        help_texts = {
+            'prefix_pattern': 'Prefix pattern to match (e.g., "192.168.0.0/16", "10.0.0.0/8"). Leave blank to match all.',
+            'min_prefix_length': 'Required for "greater", "less", and "range" filters',
+            'max_prefix_length': 'Required for "range" filter only',
+        }
+        widgets = {
+            'prefix_pattern': forms.TextInput(attrs={'placeholder': '192.168.0.0/16', 'class': 'form-control'}),
+            'min_prefix_length': forms.NumberInput(attrs={'min': 1, 'max': 128, 'class': 'form-control'}),
+            'max_prefix_length': forms.NumberInput(attrs={'min': 1, 'max': 128, 'class': 'form-control'}),
+            'description': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+            'filter_type': forms.Select(attrs={'class': 'form-select'}),
+            'prefix_length_filter': forms.Select(attrs={'class': 'form-select'}),
+            'priority': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
+

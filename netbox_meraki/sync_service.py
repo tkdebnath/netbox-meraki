@@ -15,7 +15,7 @@ from ipam.models import VLAN, VLANGroup, Prefix, IPAddress
 from extras.models import Tag, CustomField
 
 from .meraki_client import MerakiAPIClient
-from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
+from .models import SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, SyncReview, ReviewItem
 
 
 logger = logging.getLogger('netbox_meraki')
@@ -293,6 +293,12 @@ class MerakiSyncService:
         
         # Apply site name transformation rules first
         site_name = SiteNameRule.transform_network_name(network_name)
+        
+        # If site_name is None, it means the site should be skipped (doesn't match rules and process_unmatched_sites is False)
+        if site_name is None:
+            logger.info(f"⊗ Skipping site '{network_name}' - does not match any name rules")
+            return None
+        
         if site_name != network_name:
             logger.info(f"Transformed site name: '{network_name}' -> '{site_name}'")
         
@@ -399,51 +405,28 @@ class MerakiSyncService:
         # Apply device name transformation
         name = plugin_settings.transform_name(name, plugin_settings.device_name_transform)
         
-        # Get or create manufacturer
-        manufacturer, created = Manufacturer.objects.get_or_create(
-            name='Cisco Meraki'
-        )
-        if created:
-            logger.info("Created manufacturer: Cisco Meraki")
-        
-        # Get or create device type
-        device_type, created = DeviceType.objects.get_or_create(
-            model=model,
-            manufacturer=manufacturer,
-            defaults={
-                'slug': model.lower().replace(' ', '-'),
-                'part_number': model,  # Use model as part number
-            }
-        )
-        if created:
-            logger.info(f"Created device type: {model} with part number: {model}")
-            self.sync_log.add_progress_log(f"Auto-created device type: {model}", "info")
-        else:
-            # Update part_number if it's missing
-            if not device_type.part_number:
-                device_type.part_number = model
-                device_type.save()
-                logger.info(f"Updated device type {model} with part number: {model}")
-        
         # Get device role based on product type from settings
         role_name = plugin_settings.get_device_role_for_product(product_type)
-        
-        # Get or create device role
-        device_role, created = DeviceRole.objects.get_or_create(
-            name=role_name,
-            defaults={
-                'slug': role_name.lower().replace(' ', '-'),
-                'color': '2196f3',
-            }
-        )
-        
-        if created and plugin_settings.auto_create_device_roles:
-            logger.info(f"Created device role: {role_name}")
         
         # Get site name - handle both Site object and string
         site_name = site.name if hasattr(site, 'name') else site
         
-        # Prepare proposed data
+        # For MX devices, capture WAN IP
+        wan_ip = None
+        raw_wan_ip = None
+        if product_type.startswith('MX'):
+            raw_wan_ip = device.get('wan1Ip') or device.get('wan2Ip')
+            if raw_wan_ip:
+                wan_ip = raw_wan_ip
+        
+        # Prepare proposed data (don't create device types/roles yet in review mode)
+        comments = f"MAC: {device.get('mac', 'N/A')}\\n"
+        comments += f"LAN IP: {device.get('lanIp', 'N/A')}\\n"
+        if wan_ip:
+            comments += f"WAN IP: {wan_ip}\\n"
+        comments += f"Firmware: {device.get('firmware', 'N/A')}\\n"
+        comments += f"Product Type: {product_type}"
+        
         proposed_data = {
             'name': name,
             'serial': serial,
@@ -455,11 +438,9 @@ class MerakiSyncService:
             'product_type': product_type,
             'mac': device.get('mac', 'N/A'),
             'lan_ip': device.get('lanIp', 'N/A'),
+            'wan_ip': wan_ip if wan_ip else 'N/A',
             'firmware': device.get('firmware', 'N/A'),
-            'comments': f"MAC: {device.get('mac', 'N/A')}\\n"
-                       f"LAN IP: {device.get('lanIp', 'N/A')}\\n"
-                       f"Firmware: {device.get('firmware', 'N/A')}\\n"
-                       f"Product Type: {product_type}",
+            'comments': comments,
         }
         
         # Check if device exists
@@ -496,7 +477,51 @@ class MerakiSyncService:
             review_item.save()
             self.apply_review_item(review_item)
             self.sync_log.add_progress_log(f"✓ Created/Updated device: {name} (Serial: {serial})", "success")
+            
+            # For MX devices with WAN IP, create WAN interface and IP address
+            if raw_wan_ip:
+                self._create_wan_interface_and_ip(serial, name, str(wan_ip), str(raw_wan_ip))
             return
+        
+        # Review/Dry-run mode: Create staging entries for WAN interface and IP if applicable
+        if raw_wan_ip:
+            # Stage WAN interface
+            interface_data = {
+                'device': name,
+                'device_serial': serial,
+                'name': 'WAN',
+                'type': 'other',
+                'description': 'Meraki MX WAN Interface',
+                'enabled': True,
+            }
+            interface_item = self._create_review_item(
+                item_type='interface',
+                action_type='create',
+                object_name=f"{name} - WAN",
+                object_identifier=f"{serial}-wan",
+                proposed_data=interface_data,
+                current_data=None
+            )
+            logger.info(f"Created staging entry for WAN interface on {name}")
+            
+            # Stage WAN IP address
+            ip_data = {
+                'address': f"{wan_ip}/32",
+                'device': name,
+                'device_serial': serial,
+                'interface': 'WAN',
+                'description': 'Meraki MX WAN IP',
+                'status': 'active',
+            }
+            ip_item = self._create_review_item(
+                item_type='ip_address',
+                action_type='create',
+                object_name=f"{wan_ip} on {name}",
+                object_identifier=f"{serial}-wan-ip",
+                proposed_data=ip_data,
+                current_data=None
+            )
+            logger.info(f"Created staging entry for WAN IP {wan_ip} on {name}")
         
         # Review/Dry-run mode: Item stays pending in staging table
         return
@@ -534,6 +559,50 @@ class MerakiSyncService:
                 logger.debug(f"Could not fetch SSIDs for AP {device.name}: {e}")
         except Exception as e:
             logger.warning(f"Error syncing SSIDs for device {device.name}: {e}")
+    
+    def _create_wan_interface_and_ip(self, device_serial: str, device_name: str, wan_ip: str, raw_wan_ip: str):
+        """Create WAN interface and assign IP address for MX devices in auto mode"""
+        try:
+            device = Device.objects.get(serial=device_serial)
+            
+            # Create or get WAN interface
+            interface, created = Interface.objects.get_or_create(
+                device=device,
+                name='WAN',
+                defaults={
+                    'type': 'other',
+                    'description': 'Meraki MX WAN Interface',
+                    'enabled': True,
+                }
+            )
+            
+            if created:
+                logger.info(f"✓ Created WAN interface on {device_name}")
+            else:
+                logger.info(f"✓ WAN interface already exists on {device_name}")
+            
+            # Create or update IP address
+            ip_address_str = f"{raw_wan_ip}/32" if '/' not in raw_wan_ip else raw_wan_ip
+            ip_address, ip_created = IPAddress.objects.get_or_create(
+                address=ip_address_str,
+                defaults={
+                    'description': 'Meraki MX WAN IP',
+                    'status': 'active',
+                }
+            )
+            
+            # Assign IP to interface
+            if not ip_address.assigned_object:
+                ip_address.assigned_object = interface
+                ip_address.save()
+                logger.info(f"✓ Assigned WAN IP {raw_wan_ip} to interface WAN on {device_name}")
+            else:
+                logger.info(f"✓ WAN IP {raw_wan_ip} already assigned on {device_name}")
+                
+        except Device.DoesNotExist:
+            logger.error(f"Device with serial {device_serial} not found for WAN interface creation")
+        except Exception as e:
+            logger.error(f"Error creating WAN interface/IP for {device_name}: {e}")
     
     def _sync_device_interface(self, device: Device, meraki_device: Dict):
         """Sync primary interface for a device"""
@@ -760,14 +829,12 @@ class MerakiSyncService:
             vlan_name = plugin_settings.transform_name(vlan_name, plugin_settings.vlan_name_transform)
             
             try:
-                # Check if VLAN exists
+                # In review/dry-run mode, site might not exist in NetBox yet (only in staging)
+                # So we check but don't skip - just use the site name
                 site_obj = Site.objects.filter(name=site_name).first()
-                if not site_obj:
-                    logger.debug(f"Site {site_name} not found, skipping VLAN {vlan_id} in review/dry-run mode")
-                    continue
                     
                 vlan_group_name = f"{site_name} VLANs"
-                vlan_group = VLANGroup.objects.filter(name=vlan_group_name).first()
+                vlan_group = VLANGroup.objects.filter(name=vlan_group_name).first() if site_obj else None
                 
                 existing_vlan = None
                 if vlan_group:
@@ -843,6 +910,11 @@ class MerakiSyncService:
             try:
                 # Validate subnet format
                 network = ip_network(subnet, strict=False)
+                
+                # Check if prefix should be synced based on filter rules
+                if not PrefixFilterRule.should_sync_prefix(str(network)):
+                    logger.info(f"⊗ Skipping prefix {network} - excluded by filter rules")
+                    continue
                 
                 # Check if prefix exists
                 existing_prefix = Prefix.objects.filter(prefix=str(network)).first()
@@ -962,11 +1034,24 @@ class MerakiSyncService:
             preview_display = f"**Name:** {proposed_data.get('name', 'N/A')}\n"
             preview_display += f"**Device:** {proposed_data.get('device', 'N/A')}\n"
             preview_display += f"**Type:** {proposed_data.get('type', 'N/A')}\n"
-            preview_display += f"**MAC Address:** {proposed_data.get('mac_address', 'N/A')}\n"
             if proposed_data.get('description'):
                 preview_display += f"**Description:** {proposed_data['description']}\n"
             related_object_info = {
                 'device': proposed_data.get('device'),
+                'device_serial': proposed_data.get('device_serial'),
+            }
+        
+        elif item_type == 'ip_address':
+            preview_display = f"**Address:** {proposed_data.get('address', 'N/A')}\n"
+            preview_display += f"**Device:** {proposed_data.get('device', 'N/A')}\n"
+            preview_display += f"**Interface:** {proposed_data.get('interface', 'N/A')}\n"
+            preview_display += f"**Status:** {proposed_data.get('status', 'active')}\n"
+            if proposed_data.get('description'):
+                preview_display += f"**Description:** {proposed_data['description']}\n"
+            related_object_info = {
+                'device': proposed_data.get('device'),
+                'device_serial': proposed_data.get('device_serial'),
+                'interface': proposed_data.get('interface'),
             }
             
         elif item_type == 'ssid':
@@ -1085,19 +1170,59 @@ class MerakiSyncService:
                     
             elif item_type == 'prefix':
                 site = Site.objects.get(name=data['site'])
-                prefix, _ = Prefix.objects.update_or_create(
+                # Use get_or_create with site in the lookup to avoid conflicts across sites
+                prefix, created = Prefix.objects.get_or_create(
                     prefix=data['prefix'],
+                    site=site,
                     defaults={
-                        'site': site,
                         'status': 'active',
                         'description': data.get('description', ''),
                     }
                 )
+                # If it already exists, update the fields
+                if not created:
+                    prefix.status = 'active'
+                    prefix.description = data.get('description', '')
+                    prefix.save()
+                
                 # Apply prefix tags
                 tag_names = plugin_settings.get_tags_for_object_type('prefix')
                 for tag_name in tag_names:
                     tag, _ = Tag.objects.get_or_create(name=tag_name)
                     prefix.tags.add(tag)
+            
+            elif item_type == 'interface':
+                # Find device by serial
+                device = Device.objects.get(serial=data.get('device_serial'))
+                interface, _ = Interface.objects.get_or_create(
+                    device=device,
+                    name=data['name'],
+                    defaults={
+                        'type': data.get('type', 'other'),
+                        'description': data.get('description', ''),
+                        'enabled': data.get('enabled', True),
+                    }
+                )
+                logger.info(f"Created/Updated interface {data['name']} on device {device.name}")
+            
+            elif item_type == 'ip_address':
+                # Find device and interface
+                device = Device.objects.get(serial=data.get('device_serial'))
+                interface = Interface.objects.get(device=device, name=data.get('interface'))
+                
+                ip_address, _ = IPAddress.objects.get_or_create(
+                    address=data['address'],
+                    defaults={
+                        'description': data.get('description', ''),
+                        'status': data.get('status', 'active'),
+                    }
+                )
+                
+                # Assign to interface
+                if not ip_address.assigned_object:
+                    ip_address.assigned_object = interface
+                    ip_address.save()
+                    logger.info(f"Assigned IP {data['address']} to interface {data.get('interface')} on device {device.name}")
             
             logger.info(f"Applied review item: {item.action_type} {item.item_type} - {item.object_name}")
             

@@ -17,6 +17,12 @@ urlpatterns = [
     path('site-rules/<int:pk>/edit/', views.SiteNameRuleUpdateView.as_view(), name='sitenamerule_edit'),
     path('site-rules/<int:pk>/delete/', views.SiteNameRuleDeleteView.as_view(), name='sitenamerule_delete'),
     
+    # Prefix Filter Rules
+    path('prefix-filters/', views.PrefixFilterRuleListView.as_view(), name='prefixfilterrule_list'),
+    path('prefix-filters/add/', views.PrefixFilterRuleCreateView.as_view(), name='prefixfilterrule_add'),
+    path('prefix-filters/<int:pk>/edit/', views.PrefixFilterRuleUpdateView.as_view(), name='prefixfilterrule_edit'),
+    path('prefix-filters/<int:pk>/delete/', views.PrefixFilterRuleDeleteView.as_view(), name='prefixfilterrule_delete'),
+    
     # Review Management
     path('reviews/', views.ReviewListView.as_view(), name='review_list'),
     path('review/<int:pk>/', views.ReviewDetailView.as_view(), name='review_detail'),
