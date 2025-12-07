@@ -1344,21 +1344,25 @@ class MerakiSyncService:
                 except Site.DoesNotExist:
                     raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
                     
-                # For NetBox 4.x: Use prefix as the unique lookup, site in defaults
-                prefix, created = Prefix.objects.get_or_create(
-                    prefix=data['prefix'],
-                    defaults={
-                        'site': site,
-                        'status': 'active',
-                        'description': data.get('description', ''),
-                    }
-                )
-                # If it already exists, update the fields
-                if not created:
-                    prefix.site = site
-                    prefix.status = 'active'
-                    prefix.description = data.get('description', '')
-                    prefix.save()
+                # For NetBox 4.x: Check if prefix exists at this site first
+                existing_prefix = Prefix.objects.filter(prefix=data['prefix'], site=site).first()
+                
+                if existing_prefix:
+                    # Update existing prefix
+                    existing_prefix.status = 'active'
+                    existing_prefix.description = data.get('description', '')
+                    existing_prefix.save()
+                    prefix = existing_prefix
+                    created = False
+                else:
+                    # Create new prefix
+                    prefix = Prefix.objects.create(
+                        prefix=data['prefix'],
+                        site=site,
+                        status='active',
+                        description=data.get('description', ''),
+                    )
+                    created = True
                 
                 logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']}")
                 # Apply prefix tags
