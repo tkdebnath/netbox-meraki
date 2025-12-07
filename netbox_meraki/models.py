@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class PluginSettings(models.Model):
     """Plugin configuration settings"""
     
-    # Device Role Mappings for different Meraki product types
+    
     mx_device_role = models.CharField(
         max_length=100,
         default='Security Appliance',
@@ -54,7 +54,7 @@ class PluginSettings(models.Model):
         help_text='Default device role for unknown product types'
     )
     
-    # Other settings
+    
     auto_create_device_roles = models.BooleanField(
         default=True,
         help_text='Automatically create device roles if they do not exist'
@@ -71,7 +71,7 @@ class PluginSettings(models.Model):
         help_text='Default synchronization mode: Auto (immediate), Review (requires approval), or Dry Run (preview only)'
     )
     
-    # Name transformation settings
+    
     device_name_transform = models.CharField(
         max_length=20,
         choices=[
@@ -121,7 +121,7 @@ class PluginSettings(models.Model):
         help_text='How to transform SSID names from Meraki'
     )
     
-    # Tag settings - comma-separated tag names
+    
     site_tags = models.CharField(
         max_length=500,
         blank=True,
@@ -151,14 +151,14 @@ class PluginSettings(models.Model):
         help_text='Comma-separated list of tags to apply to prefixes/subnets (e.g., "Meraki,Subnet")'
     )
     
-    # Site Name Rule Settings
+    
     process_unmatched_sites = models.BooleanField(
         default=True,
         verbose_name='Process Sites Not Matching Name Rules',
         help_text='If enabled, sites that do not match any name rules will still be processed using their original network name. If disabled, only sites matching name rules will be synced.'
     )
     
-    # Scheduling Settings
+    
     enable_scheduled_sync = models.BooleanField(
         default=False,
         verbose_name='Enable Scheduled Sync',
@@ -193,7 +193,7 @@ class PluginSettings(models.Model):
         help_text='Timestamp of next scheduled sync'
     )
     
-    # API Performance Settings
+    
     enable_api_throttling = models.BooleanField(
         default=True,
         verbose_name='Enable API Throttling',
@@ -636,12 +636,12 @@ class SyncLog(models.Model):
     errors = models.JSONField(default=list, blank=True)
     duration_seconds = models.FloatField(null=True, blank=True)
     
-    # Progress tracking
+    
     progress_logs = models.JSONField(default=list, blank=True, help_text='Live progress log entries')
     current_operation = models.CharField(max_length=255, blank=True, help_text='Current sync operation')
     progress_percent = models.IntegerField(default=0, help_text='Overall progress percentage')
     
-    # Cancel capability
+    
     cancel_requested = models.BooleanField(default=False, help_text='Flag to cancel ongoing sync')
     cancelled_at = models.DateTimeField(null=True, blank=True, help_text='When sync was cancelled')
     sync_mode = models.CharField(

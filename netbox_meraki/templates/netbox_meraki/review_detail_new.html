@@ -1,8 +1,8 @@
-{% extends 'base/layout.html' %}
+{% extends 'netbox_meraki/base.html' %}
 {% load static %}
 {% load meraki_extras %}
 
-{% block content %}
+{% block page_content %}
 <div class="row">
     <div class="col-md-12">
         <h1>Sync Review: {{ sync_log.timestamp }}</h1>

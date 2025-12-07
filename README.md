@@ -1,101 +1,165 @@
 # NetBox Meraki Sync Plugin
 
-A NetBox plugin that synchronizes Cisco Meraki Dashboard data to NetBox. This plugin provides intelligent one-way synchronization with automatic cleanup and update capabilities.
+A comprehensive NetBox plugin for synchronizing Cisco Meraki infrastructure with NetBox. Automatically imports networks, devices, VLANs, IP prefixes, wireless LANs, and maintains accurate inventory with intelligent cleanup capabilities.
+
+**Author:** Tarani Debnath
 
 ## Features
 
 ### Core Synchronization
-- **One-way synchronization** from Meraki Dashboard to NetBox
-- **Organization support**: Sync multiple Meraki organizations
-- **Network sync**: Meraki networks are imported as NetBox Sites
-- **Device sync**: Import Meraki devices with accurate information including:
-  - Device model and manufacturer
-  - Serial numbers (enforced uniqueness)
-  - Management IP addresses and interfaces
-  - Device status (active/offline)
-  - Firmware versions (custom field)
-  - Wireless SSIDs (for access points)
-  - Switch port configurations with VLANs
-- **VLAN sync**: Import VLANs configured on MX appliances
-- **Prefix sync**: Import subnets/prefixes with automatic site updates
+- **Organizations & Networks**: Sync single or multiple Meraki organizations with selective network filtering
+- **Sites**: Meraki networks automatically mapped to NetBox sites with customizable name rules
+- **Devices**: Complete device inventory with accurate models, roles, and serial numbers
+  - Automatic device role assignment based on product type (MX, MS, MR, MG, MV, MT)
+  - Color-coded roles for easy visual identification
+  - Firmware version tracking via custom fields
+  - MAC address storage
+  - Device status monitoring (active/offline)
+- **VLANs**: Import configured VLANs from MX security appliances
+- **IP Prefixes/Subnets**: Automatic prefix discovery with site association
+- **Interfaces**: 
+  - WAN interfaces with public IP assignments for MX devices
+  - SVI (VLAN) interfaces for all configured VLANs on MX appliances
+  - Wireless interfaces for access points
+- **Wireless LANs**: Native NetBox Wireless LAN objects for SSIDs
+  - Organization-wide SSID management
+  - Automatic association with access points
+  - Authentication and encryption tracking
 
-### Smart Data Management
-- **Orphaned object cleanup**: Automatically removes objects deleted from Meraki
-- **Device serial uniqueness**: Prevents duplicate devices with same serial number
-- **Prefix site updates**: Automatically updates prefix sites when networks change
-- **Interface management**: Full switch port sync with VLAN assignments (access/trunk)
-- **Custom fields**: Automatic creation for firmware versions and SSIDs
+### Advanced Features
+- **Three Sync Modes**:
+  - **Auto Sync**: Immediate application of changes
+  - **Review Mode**: Stage changes for manual approval
+  - **Dry Run**: Preview changes without modifications
+- **Intelligent Cleanup**: Automatic removal of objects no longer in Meraki
+- **Flexible Filtering**:
+  - Organization selection
+  - Network-specific sync
+  - Prefix filtering with include/exclude rules
+  - Site name transformation rules
+- **Name Transformations**: Standardize naming across devices, sites, VLANs, and SSIDs
+- **Tag Management**: Optional tagging for all synchronized objects
+- **API Rate Limiting**: Built-in throttling to respect Meraki API limits
+- **Scheduled Syncs**: Background job support with configurable intervals
+- **Live Progress Tracking**: Real-time sync status with detailed logs
 
-### Operational Features
-- **Three sync modes**: Auto, Review (with approval), and Dry Run
-- **Automatic tagging**: All synced objects tagged with "Meraki"
-- **Comprehensive logging**: Track all sync operations with detailed statistics
-- **Web UI**: Dashboard for monitoring sync status and triggering syncs
-- **Management command**: CLI command for automation and scheduling
-- **REST API**: Programmatic access to sync logs and trigger syncs
-- **Scheduling**: Built-in scheduler with cron/systemd/continuous service support
+## Screenshots
+
+### Dashboard
+![Dashboard](docs/images/dashboard.png)
+*Main dashboard showing sync status and quick actions*
+
+### Sync Interface
+![Sync Interface](docs/images/sync.png)
+*Start synchronization with organization and network filtering*
+
+### Configuration
+![Configuration](docs/images/configuration.png)
+*Device role mappings and transformation settings*
+
+### API Performance Settings
+![API Performance](docs/images/api_performance.png)
+*API rate limiting and multithreading configuration*
 
 ## Requirements
 
-- NetBox 4.4.x
-- Python 3.10 or higher
-- Cisco Meraki Dashboard API key
+- NetBox 4.4.x or higher
+- Python 3.10+
+- Meraki Dashboard API access
 
 ## Installation
 
-### 1. Install the plugin
+### Option 1: Docker Installation (Recommended)
+
+For NetBox running in Docker, add the plugin to your NetBox container:
+
+#### Step 1: Clone the Repository
 
 ```bash
-pip install netbox-meraki
+cd /opt
+git clone https://github.com/tkdebnath/netbox-meraki.git
 ```
 
-Or install from source:
+#### Step 2: Update Docker Compose
+
+Edit your `docker-compose.yml`:
+
+```yaml
+services:
+  netbox:
+    image: netboxcommunity/netbox:latest
+    # ... other configuration ...
+    volumes:
+      - /opt/netbox-meraki:/opt/netbox-meraki:ro
+      - ./extra-requirements.txt:/opt/netbox/extra-requirements.txt:ro
+```
+
+#### Step 3: Create Requirements File
+
+Create `extra-requirements.txt` in your NetBox directory:
+
+```txt
+/opt/netbox-meraki
+```
+
+#### Step 4: Rebuild and Restart
 
 ```bash
-git clone https://github.com/yourusername/netbox-meraki.git
+docker-compose down
+docker-compose build --no-cache netbox
+docker-compose up -d
+```
+
+#### Step 5: Run Migrations
+
+```bash
+docker-compose exec netbox python /opt/netbox/netbox/manage.py migrate netbox_meraki
+docker-compose exec netbox python /opt/netbox/netbox/manage.py collectstatic --no-input
+```
+
+#### Step 6: Restart Services
+
+```bash
+docker-compose restart netbox
+```
+
+### Option 2: Standard Installation
+
+For NetBox installed directly on a server:
+
+#### Step 1: Activate Virtual Environment
+
+```bash
+source /opt/netbox/venv/bin/activate
+```
+
+#### Step 2: Install Plugin
+
+```bash
+# From PyPI (when published)
+pip install netbox-meraki
+
+# Or from source
+cd /opt
+git clone https://github.com/tkdebnath/netbox-meraki.git
 cd netbox-meraki
 pip install .
 ```
 
-### 2. Enable the plugin
-
-Add `netbox_meraki` to the `PLUGINS` list in your NetBox `configuration.py`:
-
-```python
-PLUGINS = [
-    'netbox_meraki',
-]
-```
-
-### 3. Configure the plugin
-
-Add the plugin configuration to `PLUGINS_CONFIG` in `configuration.py`:
-
-```python
-PLUGINS_CONFIG = {
-    'netbox_meraki': {
-        'meraki_api_key': 'your-meraki-api-key-here',
-        'meraki_base_url': 'https://api.meraki.com/api/v1',
-        'sync_interval': 3600,  # Optional: seconds between auto-syncs
-        'auto_create_sites': True,
-        'auto_create_device_types': True,
-        'auto_create_device_roles': True,
-        'auto_create_manufacturers': True,
-        'default_device_role': 'Network Device',
-        'default_manufacturer': 'Cisco Meraki',
-    }
-}
-```
-
-### 4. Run database migrations
+#### Step 3: Run Migrations
 
 ```bash
-cd /opt/netbox
-source venv/bin/activate
+cd /opt/netbox/netbox
 python manage.py migrate netbox_meraki
 ```
 
-### 5. Restart NetBox
+#### Step 4: Collect Static Files
+
+```bash
+python manage.py collectstatic --no-input
+```
+
+#### Step 5: Restart Services
 
 ```bash
 sudo systemctl restart netbox netbox-rq
@@ -103,350 +167,341 @@ sudo systemctl restart netbox netbox-rq
 
 ## Configuration
 
-### Required Settings
+Edit your NetBox `configuration.py` file (located at `/opt/netbox/netbox/netbox/configuration.py`):
 
-- `meraki_api_key`: Your Cisco Meraki Dashboard API key
+```python
+# Enable the plugin
+PLUGINS = [
+    'netbox_meraki',
+]
 
-### Optional Settings
+# Plugin configuration
+PLUGINS_CONFIG = {
+    'netbox_meraki': {
+        'meraki_api_key': 'your_meraki_api_key_here',
+        'meraki_base_url': 'https://api.meraki.com/api/v1',
+        'hide_api_key': True,
+    }
+}
+```
 
-- `meraki_base_url`: Meraki API base URL (default: `https://api.meraki.com/api/v1`)
-- `sync_interval`: Auto-sync interval in seconds (default: 3600)
-- `auto_create_sites`: Automatically create sites for Meraki networks (default: True)
-- `auto_create_device_types`: Automatically create device types (default: True)
-- `auto_create_device_roles`: Automatically create device roles (default: True)
-- `auto_create_manufacturers`: Automatically create manufacturers (default: True)
-- `default_device_role`: Default device role name (default: "Network Device")
-- `default_manufacturer`: Default manufacturer name (default: "Cisco Meraki")
+### Obtaining a Meraki API Key
 
-### Getting a Meraki API Key
-
-1. Log in to the Meraki Dashboard
-2. Navigate to Organization > Settings > Dashboard API access
+1. Log in to the [Meraki Dashboard](https://dashboard.meraki.com/)
+2. Navigate to **Organization > Settings > Dashboard API access**
 3. Enable API access
-4. Generate an API key
-5. Copy the key and add it to your NetBox configuration
+4. Generate a new API key
+5. Copy the key to your NetBox configuration
+6. Restart NetBox after updating configuration
 
 ## Usage
 
-### Sync Modes
+### Quick Start Guide
 
-The plugin supports three synchronization modes to give you control over how changes are applied:
+#### 1. Access the Plugin
 
-#### Auto Sync
-All changes from Meraki are immediately applied to NetBox without review. This is the fastest mode and is suitable for automated environments where you trust the sync process.
+Navigate to **Plugins > Meraki Sync > Dashboard** in NetBox.
 
-**Use cases:**
-- Scheduled automatic syncs
-- Initial setup and testing
-- Environments where immediate sync is required
+#### 2. Start a Sync
 
-#### Sync with Review
-Changes are staged for review before being applied. You can approve or reject individual items (sites, devices, VLANs, prefixes) before they are created or updated in NetBox.
+Click the **Sync Now** button to open the synchronization interface.
 
-**Use cases:**
-- Production environments requiring change control
-- When you want to selectively sync certain items
-- Compliance requirements for change approval
+#### 3. Choose Sync Mode
 
-**Workflow:**
-1. Trigger sync with "Review" mode
-2. Review all proposed changes in the web interface
-3. Approve or reject individual items
-4. Apply approved changes to NetBox
+Select your preferred sync mode:
+- **Auto Sync**: Changes apply immediately to NetBox
+- **Sync with Review**: Review and approve changes before applying
+- **Dry Run**: Preview changes without making any modifications
 
-#### Dry Run
-Preview all changes that would be made without actually modifying NetBox. This is useful for testing and understanding what the sync will do.
+#### 4. Filter Options (Optional)
 
-**Use cases:**
-- Testing before running a real sync
-- Understanding the impact of synchronization
-- Validating configuration before applying changes
+- **Organization**: Select a specific organization or sync all
+- **Networks**: Choose specific networks or sync all networks in the organization
 
-### Web Interface
+#### 5. Start Synchronization
 
-1. Navigate to **Plugins > Meraki Sync** in NetBox
-2. View the dashboard for sync status and history
-3. Click **Sync Now** to trigger a manual synchronization
-4. Select your desired sync mode (Auto, Review, or Dry Run)
-5. For Review mode: navigate to the review page to approve/reject changes
-6. View detailed sync logs by clicking on log entries
+Click **Start Synchronization** and monitor the live progress logs.
 
-### Management Command
+### Configuration Options
 
-Run synchronization from the command line:
+Access **Plugins > Meraki Sync > Configuration** to customize behavior:
 
-```bash
-# Auto sync (default - immediate application)
-python manage.py sync_meraki
+#### Device Role Mappings Tab
 
-# Sync with review (stage changes for approval)
-python manage.py sync_meraki --mode review
+Configure which NetBox device role to use for each Meraki product type:
 
-# Dry run (preview only, no changes applied)
-python manage.py sync_meraki --mode dry_run
+| Product Type | Default Role | Description |
+|--------------|--------------|-------------|
+| MX | Security Appliance | Security appliances and firewalls |
+| MS | Switch | Network switches |
+| MR | Wireless AP | Wireless access points |
+| MG | Cellular Gateway | Cellular gateways |
+| MV | Camera | Security cameras |
+| MT | Sensor | Environmental sensors |
+
+#### Name Transformations Tab
+
+Standardize naming conventions for all synchronized objects:
+- **Device Names**: Transform device names (UPPERCASE, lowercase, Title Case, Keep Original)
+- **Site Names**: Transform site names
+- **VLAN Names**: Transform VLAN names
+- **SSID Names**: Transform wireless SSID names
+
+#### Site Name Rules Tab
+
+Define regex patterns to transform Meraki network names into NetBox site names:
+
+**Example:**
+```
+Pattern: ^(?P<region>[A-Z]{2})-(?P<site>[A-Z]{3})-.*
+Template: {region}-{site}
+Priority: 1
 ```
 
-With a custom API key:
+**Result:** `AMER-ABC-ALBERTA` becomes `AMER-ABC`
 
-```bash
-python manage.py sync_meraki --api-key your-api-key --mode review
-```
+#### Prefix Filters Tab
 
-### REST API
+Control which subnets are synchronized to NetBox:
 
-Trigger a sync via API:
+**Include Rules:**
+- Add patterns for prefixes to sync (e.g., `10.0.0.0/8`)
+- Supports CIDR notation and wildcard patterns
 
-```bash
-curl -X POST \
-  https://your-netbox-instance/api/plugins/meraki/sync-logs/trigger_sync/ \
-  -H "Authorization: Token your-netbox-api-token" \
-  -H "Content-Type: application/json"
-```
+**Exclude Rules:**
+- Block specific prefixes (e.g., management networks)
+- Takes precedence over include rules
 
-List sync logs:
+#### Tag Configuration Tab
 
-```bash
-curl https://your-netbox-instance/api/plugins/meraki/sync-logs/ \
-  -H "Authorization: Token your-netbox-api-token"
-```
+Add tags to all synchronized objects:
+- **Site Tags**: Tags for sites created from Meraki networks
+- **Device Tags**: Tags for all devices
+- **VLAN Tags**: Tags for VLANs
+- **Prefix Tags**: Tags for IP prefixes
 
-### Scheduling Automatic Syncs
+#### Scheduling Tab
 
-You can schedule regular syncs using cron:
+Configure automatic synchronization:
+1. Enable **Scheduled Sync**
+2. Set **Sync Interval** (in seconds, default: 3600)
+3. Choose **Default Sync Mode**
+4. Jobs run automatically in the background
 
-```bash
-# Add to crontab (run every hour)
-0 * * * * cd /opt/netbox && source venv/bin/activate && python manage.py sync_meraki >> /var/log/netbox/meraki-sync.log 2>&1
-```
+#### API Performance Tab
 
-## What Gets Synchronized
+Configure API behavior:
 
-### Organizations
-- All organizations accessible with your API key
+**API Throttling:**
+- **Enabled (Recommended)**: Limits requests to 5 per second
+- Prevents hitting Meraki API rate limits
 
-### Networks → Sites
-- Network name becomes Site name
-- Network ID stored in site comments
-- Organization name included in site description
+**Multithreading:**
+- **Disabled (Safe)**: Sequential processing
+- **Enabled (Fast)**: Parallel API requests (3-5 threads)
+- ⚠️ May increase API usage
 
-### Devices
-- Serial number (used as unique identifier)
-- Device name
-- Device model (creates DeviceType if needed)
-- Device status (active/offline)
-- Management IP address
-- MAC address
-- Firmware version
-- Product type
+### Reviewing Changes (Review Mode)
 
-### VLANs
-- VLAN ID
-- VLAN name
-- Associated subnet information
-- Grouped by site
+When using **Sync with Review** mode:
 
-### Prefixes
-- Subnet/prefix from Meraki VLANs
-- Associated with NetBox sites
-- VLAN association details
-
-## Tagging
-
-All objects imported from Meraki are automatically tagged with a "Meraki" tag. This allows you to:
-- Filter objects synced from Meraki
-- Identify which objects are managed by the plugin
-- Create reports specific to Meraki infrastructure
-
-## Sync Behavior
-
-- **One-way sync**: Data flows only from Meraki to NetBox
-- **Updates**: Existing objects are updated based on serial number (devices) or name (sites, VLANs)
-- **No deletions**: The plugin does not delete objects from NetBox
-- **Idempotent**: Running sync multiple times produces the same result
+1. After sync completes, click **View Reviews** from the dashboard
+2. Review all staged changes grouped by type:
+   - Sites
+   - Device Types
+   - VLANs
+   - Prefixes
+   - Devices
+   - Interfaces
+   - IP Addresses
+   - SSIDs
+3. **Edit** proposed data if needed
+4. **Approve** or **Reject** individual items
+5. Use **Approve All** or **Reject All** for bulk actions
+6. Click **Apply Approved Changes** to commit to NetBox
 
 ## Troubleshooting
 
-### API Key Issues
+### Common Issues
 
-If you see authentication errors:
-1. Verify your API key is correct in `configuration.py`
-2. Ensure API access is enabled in Meraki Dashboard
-3. Check that the API key has access to the organizations
+#### API Key Invalid
 
-### No Data Syncing
+**Symptoms:** Authentication errors, "Invalid API key" messages
 
-1. Check sync logs in the plugin dashboard
-2. Review NetBox logs: `/var/log/netbox/netbox.log`
-3. Verify network connectivity to Meraki API
-4. Ensure you have organizations and networks in Meraki
+**Solutions:**
+- Verify API key in NetBox configuration
+- Check API access is enabled in Meraki Dashboard
+- Ensure key has not expired
+- Restart NetBox after configuration changes
 
-### Permission Errors
+#### Rate Limit Errors
 
-The user triggering the sync needs appropriate NetBox permissions:
-- `dcim.add_device`
-- `dcim.add_site`
-- `ipam.add_vlan`
-- `ipam.add_prefix`
+**Symptoms:** "Rate limit exceeded" errors in logs
+
+**Solutions:**
+- Enable API throttling in API Performance settings
+- Reduce max worker threads
+- Increase sync interval for scheduled jobs
+- Use dry run mode to test before full sync
+
+#### Objects Not Syncing
+
+**Symptoms:** Expected devices/networks not appearing
+
+**Solutions:**
+- Check organization and network filters
+- Review sync logs for specific errors
+- Verify objects exist in Meraki Dashboard
+- Check site name rules aren't filtering out networks
+- Review prefix filters for IP objects
+
+#### Duplicate Objects
+
+**Symptoms:** Multiple entries for same device/site
+
+**Solutions:**
+- Review site name transformation rules
+- Check for conflicting regex patterns
+- Verify serial numbers are unique
+- Use dry run mode to preview changes
+
+#### Sync Hangs or Times Out
+
+**Symptoms:** Sync doesn't complete, UI becomes unresponsive
+
+**Solutions:**
+- Check network connectivity to Meraki API
+- Disable multithreading
+- Sync smaller network batches
+- Check NetBox logs for Python errors
+
+### Viewing Logs
+
+#### Dashboard Logs
+Navigate to **Dashboard** to view recent sync logs with:
+- Sync date and time
+- Sync mode used
+- Statistics (sites, devices, VLANs, prefixes created)
+- Status (completed, failed, in progress)
+
+#### Detailed Logs
+
+**Standard Installation:**
+```bash
+tail -f /opt/netbox/netbox/logs/netbox.log
+```
+
+**Docker Installation:**
+```bash
+docker-compose logs -f netbox
+```
+
+#### Admin Interface
+
+Access Django admin for full sync history:
+1. Navigate to **Admin** in NetBox
+2. Go to **NETBOX_MERAKI** section
+3. View **Sync logs** for complete history
+4. View **Sync reviews** for staged changes
+
+### Getting Help
+
+If issues persist:
+1. Enable debug logging in NetBox configuration
+2. Run sync in dry run mode
+3. Check GitHub issues for similar problems
+4. Provide logs when reporting issues
 
 ## Development
 
-### Running Tests
+### Local Development Setup
 
 ```bash
-python manage.py test netbox_meraki
+# Clone repository
+git clone https://github.com/tkdebnath/netbox-meraki.git
+cd netbox-meraki
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install in development mode
+pip install -e .
+
+# Run tests (if available)
+python -m pytest
+```
+
+### Project Structure
+
+```
+netbox-meraki/
+├── netbox_meraki/
+│   ├── __init__.py
+│   ├── admin.py
+│   ├── forms.py
+│   ├── models.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── navigation.py
+│   ├── sync_service.py
+│   ├── meraki_client.py
+│   ├── templates/
+│   ├── api/
+│   ├── management/
+│   └── migrations/
+├── README.md
+├── LICENSE
+├── pyproject.toml
+└── requirements.txt
 ```
 
 ### Contributing
 
+Contributions are welcome! To contribute:
+
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Add tests
-5. Submit a pull request
+4. Test thoroughly
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
 
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/netbox-meraki/issues)
-- **Documentation**: [GitHub Wiki](https://github.com/yourusername/netbox-meraki/wiki)
-
-## Additional Documentation
-
-- **[SCHEDULING_GUIDE.md](SCHEDULING_GUIDE.md)** - Complete guide for setting up automatic scheduled syncs
-- **[SYNC_BEHAVIOR.md](SYNC_BEHAVIOR.md)** - Detailed sync behavior, cleanup rules, and data consistency
-- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - Comprehensive installation and setup guide
-- **[CONFIGURATION_EXAMPLES.md](CONFIGURATION_EXAMPLES.md)** - Configuration examples and recipes
-- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference for common tasks
+Please ensure:
+- Code follows existing style
+- All tests pass
+- Documentation is updated
+- Commit messages are clear
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+### Documentation
+- [Installation Guide](INSTALL.md) - Detailed installation instructions
+- [Changelog](CHANGELOG.md) - Version history and changes
+
+### Issues and Questions
+- **GitHub Issues**: [Report a bug or request a feature](https://github.com/tkdebnath/netbox-meraki/issues)
+- **Discussions**: Share ideas and ask questions
+
+### Compatibility
+- NetBox 4.4.x (tested)
+- Python 3.10, 3.11, 3.12
+- Meraki Dashboard API v1
 
 ## Acknowledgments
 
-- Built for [NetBox](https://github.com/netbox-community/netbox)
-- Uses [Cisco Meraki Dashboard API](https://developer.cisco.com/meraki/api-latest/)
+- **NetBox Community** for the excellent IPAM/DCIM platform
+- **Cisco Meraki** for their comprehensive API
+- All contributors who help improve this plugin
 
-## Changelog
+---
 
-### Version 0.6.0 (Latest)
-
-**Live Progress & Monitoring:**
-- Real-time progress tracking with live logs during sync
-- Progress bar showing completion percentage
-- Current operation display showing what's being synced
-- Auto-refreshing sync log view (3-second intervals)
-- Comprehensive progress logging with timestamps and levels (INFO/WARN/ERROR)
-- SSID synchronization tracking in statistics
-
-**Cancel Sync Capability:**
-- Cancel button for ongoing sync operations
-- Graceful cancellation after current operation completes
-- API endpoint for programmatic cancellation
-- Cancellation timestamp tracking
-- Prevents data corruption by completing current operation
-
-**Enhanced Review Mode:**
-- Categorized review items by type (Sites, Devices, VLANs, Prefixes, SSIDs)
-- Detailed preview displays for each item showing all field values
-- Related object information (site, role, manufacturer, etc.)
-- Side-by-side comparison for updates (current vs. new values)
-- Expandable sections for better organization
-- Device type and SSID item types added
-
-**Automatic Device Type Creation:**
-- Automatically creates missing device types during sync
-- Part number field automatically filled with model number
-- Updates existing device types if part number is missing
-- Reduces manual configuration requirements
-- Progress log entry when device types are created
-
-**API Enhancements:**
-- `/api/plugins/netbox-meraki/sync-logs/{id}/progress/` - Get live progress updates
-- `/api/plugins/netbox-meraki/sync-logs/{id}/cancel/` - Cancel ongoing sync
-- Real-time JSON response with all sync statistics
-- SSID count included in progress data
-
-**Migration Required:**
-```bash
-python manage.py migrate netbox_meraki
-```
-
-### Version 0.5.0
-
-**Name Transformation Features:**
-- Configurable name transformations for devices, sites, VLANs, and SSIDs
-- Options: Keep Original, UPPERCASE, lowercase, Title Case
-- Applied during sync for consistent naming conventions
-- Separate control for each object type
-
-**NetBox Job Integration:**
-- Native NetBox background job support
-- `MerakiSyncJob` - Manual sync via Jobs UI
-- `ScheduledMerakiSyncJob` - Scheduled sync with status tracking
-- View job status, logs, and history in NetBox UI
-- Schedule jobs using NetBox's built-in scheduler
-- Better visibility and monitoring
-
-**UI Enhancements:**
-- New "Name Transformations" configuration tab
-- Examples for each transformation type
-- Quick access to Scheduled Jobs from dashboard
-- Improved configuration organization
-
-**Migration Required:**
-```bash
-python manage.py migrate netbox_meraki
-```
-
-See configuration tab for name transformation settings.
-
-### Version 0.4.0
-
-**Scheduling Features:**
-- Built-in scheduling system with configurable intervals
-- Multiple deployment options: systemd service, systemd timer, cron jobs
-- Continuous background service mode with auto-restart
-- Configurable sync modes for scheduled runs (auto/review/dry_run)
-- Automatic next-sync-time calculation and tracking
-- Web UI for scheduling configuration
-- `schedule_meraki_sync` management command
-- Systemd and cron deployment templates included
-
-See [SCHEDULING_GUIDE.md](SCHEDULING_GUIDE.md) for setup instructions.
-
-### Version 0.3.0
-
-**Smart Data Management:**
-- Automatic orphaned object cleanup (sites, devices, VLANs, prefixes)
-- Device serial number uniqueness enforcement (prevents duplicates)
-- Automatic prefix site updates when network changes
-- Comprehensive interface syncing with VLANs (access/trunk modes)
-- Switch port configuration sync with VLAN assignments
-
-**Enhanced Features:**
-- Custom fields for firmware versions and SSIDs
-- Wireless AP SSID tracking
-- IP address management on interfaces
-- Detailed cleanup and update statistics
-- Enhanced logging for all operations
-
-See [SYNC_BEHAVIOR.md](SYNC_BEHAVIOR.md) for detailed documentation on new features.
-
-### Version 0.2.0
-
-- Added three sync modes: Auto, Review, and Dry Run
-- Review management interface for staged changes
-- Approve/reject individual items before applying
-- Enhanced management command with --mode option
-- Database-backed review tracking with SyncReview and ReviewItem models
-
-### Version 0.1.0 (Initial Release)
-
-- Initial plugin implementation
-- One-way sync from Meraki to NetBox
-- Support for networks, devices, VLANs, and prefixes
-- Web UI dashboard and sync management
-- REST API endpoints
-- Management command for CLI usage
-- Comprehensive sync logging
-- Device role mappings and site name transformation rules
+**Made with ❤️ by Tarani Debnath**

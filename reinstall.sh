@@ -1,11 +1,9 @@
 #!/bin/bash
-# NetBox Meraki Plugin - Complete Reinstall Script
-# Run this script after making code changes to completely uninstall and reinstall the plugin
 
 set -e
 
 echo "========================================="
-echo "NetBox Meraki Plugin - Complete Reinstall"
+echo "NetBox Meraki Plugin - Reinstall"
 echo "========================================="
 echo ""
 

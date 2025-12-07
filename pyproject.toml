@@ -1,6 +1,6 @@
 [project]
 name = "netbox-meraki"
-version = "0.1.0"
+version = "1.0.0"
 description = "NetBox plugin for synchronizing Cisco Meraki Dashboard networks, devices, VLANs, and prefixes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,25 +8,28 @@ dependencies = [
     "requests>=2.31.0",
 ]
 authors = [
-    { name = "NetBox Meraki Team", email = "support@example.com" }
+    { name = "Tarani Debnath", email = "tarani.debnath@example.com" }
 ]
-keywords = ["netbox", "meraki", "cisco", "plugin", "network", "automation"]
+keywords = ["netbox", "meraki", "cisco", "plugin", "network", "automation", "ipam", "dcim"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: Django",
     "Intended Audience :: System Administrators",
+    "Intended Audience :: Telecommunications Industry",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/netbox-meraki"
-Documentation = "https://github.com/yourusername/netbox-meraki/blob/main/README.md"
-Repository = "https://github.com/yourusername/netbox-meraki"
-Issues = "https://github.com/yourusername/netbox-meraki/issues"
+Homepage = "https://github.com/tkdebnath/netbox-meraki"
+Repository = "https://github.com/tkdebnath/netbox-meraki"
+Issues = "https://github.com/tkdebnath/netbox-meraki/issues"
+Changelog = "https://github.com/tkdebnath/netbox-meraki/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]

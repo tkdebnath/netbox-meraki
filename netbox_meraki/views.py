@@ -23,10 +23,8 @@ class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         recent_logs = SyncLog.objects.all()[:10]
         
-        # Get latest successful sync
         latest_sync = SyncLog.objects.filter(status='success').first()
         
-        # Get plugin configuration
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
         api_key_configured = bool(plugin_config.get('meraki_api_key'))
         
@@ -47,7 +45,6 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def get(self, request):
         plugin_settings = PluginSettings.get_settings()
         
-        # Fetch organizations for selection
         try:
             sync_service = MerakiSyncService()
             organizations = sync_service.client.get_organizations()
@@ -76,7 +73,6 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             logger.info(f"Manual sync triggered by user {request.user} (mode: {sync_mode}, org: {organization_id})")
             
-            # Start sync with selected mode and filters
             sync_service = MerakiSyncService(sync_mode=sync_mode)
             sync_log = sync_service.sync_all(
                 organization_id=organization_id if organization_id else None,
@@ -410,7 +406,6 @@ class ReviewItemEditView(LoginRequiredMixin, View):
         review = get_object_or_404(SyncReview, pk=pk)
         item = get_object_or_404(ReviewItem, pk=item_pk, review=review)
         
-        # Build editable_data from form
         editable_data = {}
         
         # Common fields based on item type
@@ -468,7 +463,6 @@ class ReviewListView(LoginRequiredMixin, ListView):
     ordering = ['-created']
 
 
-# API Views for live sync progress
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -516,7 +510,6 @@ def get_networks_for_org(request, org_id):
         sync_service = MerakiSyncService()
         networks = sync_service.client.get_networks(org_id)
         
-        # Format networks for select dropdown
         network_list = [
             {
                 'id': net['id'],

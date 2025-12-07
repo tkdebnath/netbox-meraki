@@ -1,6 +1,3 @@
-"""
-Sync service for importing Meraki data into NetBox
-"""
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -46,7 +43,6 @@ class MerakiSyncService:
             'updated_prefixes': 0,
         }
         self.errors = []
-        # Track all synced object IDs to detect orphans
         self.synced_object_ids = {
             'sites': set(),
             'devices': set(),
@@ -59,7 +55,6 @@ class MerakiSyncService:
         """Ensure required custom fields exist"""
         device_ct = ContentType.objects.get_for_model(Device)
         
-        # Create firmware version custom field
         firmware_field, created = CustomField.objects.get_or_create(
             name='meraki_firmware',
             defaults={
@@ -70,13 +65,11 @@ class MerakiSyncService:
             }
         )
         if created:
-            # NetBox 4.x uses object_types instead of content_types
             firmware_field.object_types.set([device_ct])
             logger.info("Created custom field: meraki_firmware")
         elif device_ct not in firmware_field.object_types.all():
             firmware_field.object_types.add(device_ct)
         
-        # Create MAC address custom field
         mac_field, created = CustomField.objects.get_or_create(
             name='meraki_mac_address',
             defaults={
@@ -87,7 +80,6 @@ class MerakiSyncService:
             }
         )
         if created:
-            # NetBox 4.x uses object_types instead of content_types
             mac_field.object_types.set([device_ct])
             logger.info("Created custom field: meraki_mac_address")
         elif device_ct not in mac_field.object_types.all():
@@ -98,7 +90,6 @@ class MerakiSyncService:
         from datetime import timedelta
         from django.utils import timezone
         
-        # Delete review items from completed/applied reviews older than 7 days
         cutoff_date = timezone.now() - timedelta(days=7)
         old_reviews = SyncReview.objects.filter(
             status__in=['applied', 'cancelled'],
@@ -114,7 +105,7 @@ class MerakiSyncService:
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} old review items from completed syncs")
         
-        # Also delete orphaned review items (reviews without sync logs)
+        
         orphaned_reviews = SyncReview.objects.filter(sync_log__isnull=True)
         for review in orphaned_reviews:
             review.delete()
@@ -132,7 +123,7 @@ class MerakiSyncService:
         """
         start_time = datetime.now()
         
-        # Clean up old review items from previous syncs
+        
         self._cleanup_old_review_items()
         
         # Determine status based on sync mode
@@ -161,7 +152,7 @@ class MerakiSyncService:
             self.sync_log.add_progress_log("Starting Meraki synchronization", "info")
             self.sync_log.update_progress("Initializing sync", 0)
             
-            # Get or create Meraki tag
+            
             meraki_tag, _ = Tag.objects.get_or_create(
                 name='Meraki',
                 defaults={'description': 'Synced from Cisco Meraki Dashboard'}
@@ -180,7 +171,7 @@ class MerakiSyncService:
             
             total_orgs = len(organizations)
             for idx, org in enumerate(organizations):
-                # Check for cancellation
+                
                 if self.sync_log.check_cancel_requested():
                     self.sync_log.add_progress_log("Sync cancelled by user", "warning")
                     self.sync_log.status = 'failed'
@@ -413,7 +404,7 @@ class MerakiSyncService:
         logger.info(f"Created staging entry for site: {site_name} ({action_type})")
         self.sync_log.add_progress_log(f"Staging site: {site_name} (Network: {network_name})", "info")
         
-        # Auto mode: Immediately approve and apply
+        
         if self.sync_mode == 'auto' and review_item:
             try:
                 review_item.status = 'approved'
@@ -433,7 +424,7 @@ class MerakiSyncService:
                 self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                 raise
         else:
-            # Review/Dry-run mode: Use existing site or site name for device references
+            
             site = existing_site if existing_site else site_name
         
         # Sync VLANs and prefixes (now works in all modes via staging)
@@ -475,7 +466,7 @@ class MerakiSyncService:
         tags = device.get('tags', [])
         address = device.get('address', '')
         
-        # Extract product type: use productType if available, otherwise extract from model
+        # Extract product type from model
         product_type = device.get('productType', '')
         if not product_type and model and len(model) >= 2:
             # Get first two characters of model (e.g., "MS350-48LP" -> "MS")
@@ -566,7 +557,7 @@ class MerakiSyncService:
         site_name = site.name if isinstance(site, Site) else site
         self.sync_log.add_progress_log(f"Staging device: {name} [{model}] at {site_name}", "info")
         
-        # Auto mode: Immediately approve and apply
+        
         if self.sync_mode == 'auto' and review_item:
             try:
                 review_item.status = 'approved'
@@ -611,7 +602,7 @@ class MerakiSyncService:
             
             return
         
-        # Review/Dry-run mode: Create staging entries for WAN interface and IP if applicable
+        
         if raw_wan_ip:
             # Stage WAN interface
             interface_data = {
@@ -651,7 +642,7 @@ class MerakiSyncService:
             )
             logger.info(f"Created staging entry for WAN IP {wan_ip} on {name}")
         
-        # Review/Dry-run mode: Item stays pending in staging table
+        
         return
     
     def _sync_device_ssids(self, device: Device, meraki_device: Dict):
@@ -1104,7 +1095,7 @@ class MerakiSyncService:
                     current_data=current_data
                 )
                 
-                # Auto mode: Immediately approve and apply
+                
                 if self.sync_mode == 'auto' and review_item:
                     try:
                         review_item.status = 'approved'
@@ -1122,7 +1113,7 @@ class MerakiSyncService:
                         self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                     self.stats['vlans'] += 1
                 else:
-                    # Review/Dry-run mode: Just count staged items
+                    
                     self.stats['vlans'] += 1
                 
             except Exception as e:
@@ -1192,7 +1183,7 @@ class MerakiSyncService:
                     current_data=current_data
                 )
                 
-                # Auto mode: Immediately approve and apply
+                
                 if self.sync_mode == 'auto' and review_item:
                     try:
                         review_item.status = 'approved'
@@ -1210,7 +1201,7 @@ class MerakiSyncService:
                         self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                     self.stats['prefixes'] += 1
                 else:
-                    # Review/Dry-run mode: Just count staged items
+                    
                     self.stats['prefixes'] += 1
                 
             except Exception as e:
