@@ -17,19 +17,53 @@
                 <p>This will start a synchronization from the Meraki Dashboard API to NetBox.</p>
                 
                 <div class="alert alert-info">
-                    <strong>Note:</strong> The following data will be synchronized:
-                    <ul>
-                        <li>Organizations</li>
-                        <li>Networks (as Sites)</li>
-                        <li>Devices</li>
+                    <strong>Note:</strong> Data will be synchronized in the following order to ensure proper dependencies:
+                    <ol>
+                        <li>Sites (from Meraki Networks)</li>
+                        <li>Device Types (Manufacturers & Models)</li>
                         <li>VLANs</li>
                         <li>Prefixes/Subnets</li>
+                        <li>Devices</li>
+                        <li>Interfaces</li>
+                        <li>IP Addresses</li>
                         <li>SSIDs</li>
-                    </ul>
+                    </ol>
                 </div>
 
-                <form method="post">
+                <form method="post" id="syncForm">
                     {% csrf_token %}
+                    
+                    <div class="mb-4">
+                        <label class="form-label"><strong>Organization</strong></label>
+                        <select class="form-select" name="organization_id" id="organizationSelect">
+                            <option value="">All Organizations</option>
+                            {% for org in organizations %}
+                            <option value="{{ org.id }}">{{ org.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select a specific organization or sync all</small>
+                    </div>
+                    
+                    <div class="mb-4" id="networkSelectContainer" style="display: none;">
+                        <label class="form-label"><strong>Networks</strong></label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="syncAllNetworks" name="sync_all_networks" value="true" checked>
+                            <label class="form-check-label" for="syncAllNetworks">
+                                Sync all networks in organization
+                            </label>
+                        </div>
+                        <div id="networkListContainer" style="display: none;">
+                            <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                <div id="networkList" class="mb-0">
+                                    <div class="text-muted text-center py-3">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        Loading networks...
+                                    </div>
+                                </div>
+                            </div>
+                            <small class="text-muted">Select specific networks to sync</small>
+                        </div>
+                    </div>
                     
                     <div class="mb-4">
                         <label class="form-label"><strong>Sync Mode</strong></label>
@@ -76,4 +110,122 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const orgSelect = document.getElementById('organizationSelect');
+    const networkContainer = document.getElementById('networkSelectContainer');
+    const networkListContainer = document.getElementById('networkListContainer');
+    const networkList = document.getElementById('networkList');
+    const syncAllCheckbox = document.getElementById('syncAllNetworks');
+    const form = document.getElementById('syncForm');
+    
+    // Handle organization selection
+    orgSelect.addEventListener('change', function() {
+        const orgId = this.value;
+        
+        if (orgId) {
+            // Show network selection
+            networkContainer.style.display = 'block';
+            loadNetworks(orgId);
+        } else {
+            // Hide network selection for "All Organizations"
+            networkContainer.style.display = 'none';
+            networkList.innerHTML = '';
+        }
+    });
+    
+    // Handle sync all networks checkbox
+    syncAllCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            networkListContainer.style.display = 'none';
+        } else {
+            networkListContainer.style.display = 'block';
+        }
+    });
+    
+    // Load networks for selected organization
+    function loadNetworks(orgId) {
+        networkList.innerHTML = `
+            <div class="text-muted text-center py-3">
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                Loading networks...
+            </div>
+        `;
+        
+        fetch(`/plugins/meraki/api/networks/${orgId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    networkList.innerHTML = `
+                        <div class="alert alert-danger mb-0">
+                            <strong>Error:</strong> ${data.error}
+                        </div>
+                    `;
+                    return;
+                }
+                
+                const networks = data.networks || [];
+                
+                if (networks.length === 0) {
+                    networkList.innerHTML = `
+                        <div class="text-muted text-center py-3">
+                            No networks found in this organization
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Build network checkboxes
+                let html = '';
+                networks.forEach(network => {
+                    const productTypes = network.productTypes ? network.productTypes.join(', ') : 'Unknown';
+                    const tags = network.tags && network.tags.length > 0 
+                        ? `<span class="badge bg-secondary ms-2">${network.tags.join(', ')}</span>`
+                        : '';
+                    
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input network-checkbox" type="checkbox" 
+                                   name="network_ids[]" value="${network.id}" id="net_${network.id}">
+                            <label class="form-check-label" for="net_${network.id}">
+                                <strong>${network.name}</strong>
+                                <small class="text-muted ms-2">(${productTypes})</small>
+                                ${tags}
+                            </label>
+                        </div>
+                    `;
+                });
+                
+                networkList.innerHTML = html;
+            })
+            .catch(error => {
+                console.error('Error loading networks:', error);
+                networkList.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        <strong>Error:</strong> Failed to load networks. Please try again.
+                    </div>
+                `;
+            });
+    }
+    
+    // Form validation
+    form.addEventListener('submit', function(e) {
+        const orgId = orgSelect.value;
+        const syncAll = syncAllCheckbox.checked;
+        
+        if (orgId && !syncAll) {
+            // Check if any networks are selected
+            const selectedNetworks = document.querySelectorAll('.network-checkbox:checked');
+            if (selectedNetworks.length === 0) {
+                e.preventDefault();
+                alert('Please select at least one network or enable "Sync all networks"');
+                return false;
+            }
+        }
+        
+        return true;
+    });
+});
+</script>
 {% endblock %}

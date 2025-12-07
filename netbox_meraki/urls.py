@@ -32,4 +32,5 @@ urlpatterns = [
     # API endpoints for live sync progress
     path('api/sync/<int:pk>/progress/', views.SyncProgressAPIView.as_view(), name='sync_progress_api'),
     path('api/sync/<int:pk>/cancel/', views.SyncCancelAPIView.as_view(), name='sync_cancel_api'),
+    path('api/networks/<str:org_id>/', views.get_networks_for_org, name='get_networks_for_org'),
 ]

@@ -46,6 +46,15 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     
     def get(self, request):
         plugin_settings = PluginSettings.get_settings()
+        
+        # Fetch organizations for selection
+        try:
+            sync_service = MerakiSyncService()
+            organizations = sync_service.client.get_organizations()
+        except Exception as e:
+            logger.error(f"Failed to fetch organizations: {e}")
+            organizations = []
+        
         context = {
             'title': 'Sync from Meraki',
             'sync_modes': [
@@ -54,18 +63,25 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 ('dry_run', 'Dry Run', 'Preview changes without applying'),
             ],
             'default_mode': plugin_settings.sync_mode,
+            'organizations': organizations,
         }
         return render(request, 'netbox_meraki/sync.html', context)
     
     def post(self, request):
         sync_mode = request.POST.get('sync_mode', 'review')
+        organization_id = request.POST.get('organization_id', '')
+        network_ids = request.POST.getlist('network_ids[]')
+        sync_all_networks = request.POST.get('sync_all_networks') == 'true'
         
         try:
-            logger.info(f"Manual sync triggered by user {request.user} (mode: {sync_mode})")
+            logger.info(f"Manual sync triggered by user {request.user} (mode: {sync_mode}, org: {organization_id})")
             
-            # Start sync with selected mode
+            # Start sync with selected mode and filters
             sync_service = MerakiSyncService(sync_mode=sync_mode)
-            sync_log = sync_service.sync_all()
+            sync_log = sync_service.sync_all(
+                organization_id=organization_id if organization_id else None,
+                network_ids=network_ids if network_ids and not sync_all_networks else None
+            )
             
             # Show results based on mode
             if sync_log.status == 'dry_run':
@@ -491,3 +507,27 @@ class SyncCancelAPIView(LoginRequiredMixin, View):
             return JsonResponse({'status': 'success', 'message': 'Cancellation requested'})
         else:
             return JsonResponse({'status': 'error', 'message': 'Sync is not running'}, status=400)
+
+
+@require_http_methods(["GET"])
+def get_networks_for_org(request, org_id):
+    """API endpoint to get networks for a specific organization"""
+    try:
+        sync_service = MerakiSyncService()
+        networks = sync_service.client.get_networks(org_id)
+        
+        # Format networks for select dropdown
+        network_list = [
+            {
+                'id': net['id'],
+                'name': net['name'],
+                'tags': net.get('tags', []),
+                'productTypes': net.get('productTypes', [])
+            }
+            for net in networks
+        ]
+        
+        return JsonResponse({'networks': network_list})
+    except Exception as e:
+        logger.error(f"Failed to fetch networks for org {org_id}: {e}")
+        return JsonResponse({'error': str(e)}, status=500)

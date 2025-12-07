@@ -117,9 +117,13 @@ class MerakiSyncService:
         for review in orphaned_reviews:
             review.delete()
     
-    def sync_all(self) -> SyncLog:
+    def sync_all(self, organization_id: Optional[str] = None, network_ids: Optional[List[str]] = None) -> SyncLog:
         """
         Perform full synchronization from Meraki to NetBox
+        
+        Args:
+            organization_id: Optional specific organization ID to sync
+            network_ids: Optional list of specific network IDs to sync
         
         Returns:
             SyncLog instance with results
@@ -162,11 +166,16 @@ class MerakiSyncService:
                 defaults={'description': 'Synced from Cisco Meraki Dashboard'}
             )
             
-            # Get all organizations
+            # Get all organizations or filter to specific one
             self.sync_log.add_progress_log("Fetching organizations from Meraki Dashboard", "info")
-            organizations = self.client.get_organizations()
-            logger.info(f"Found {len(organizations)} organizations")
-            self.sync_log.add_progress_log(f"Found {len(organizations)} organizations", "info")
+            if organization_id:
+                organizations = [self.client.get_organization(organization_id)]
+                logger.info(f"Syncing specific organization: {organization_id}")
+                self.sync_log.add_progress_log(f"Syncing specific organization: {organization_id}", "info")
+            else:
+                organizations = self.client.get_organizations()
+                logger.info(f"Found {len(organizations)} organizations")
+                self.sync_log.add_progress_log(f"Found {len(organizations)} organizations", "info")
             
             total_orgs = len(organizations)
             for idx, org in enumerate(organizations):
@@ -183,7 +192,7 @@ class MerakiSyncService:
                     progress = int(((idx + 1) / total_orgs) * 80)  # 0-80% for orgs
                     self.sync_log.update_progress(f"Syncing organization: {org.get('name')}", progress)
                     self.sync_log.add_progress_log(f"Processing organization: {org.get('name')}", "info")
-                    self._sync_organization(org, meraki_tag)
+                    self._sync_organization(org, meraki_tag, network_ids)
                     self.stats['organizations'] += 1
                 except Exception as e:
                     error_msg = f"Error syncing organization {org.get('name')}: {str(e)}"
@@ -248,8 +257,14 @@ class MerakiSyncService:
         
         return self.sync_log
     
-    def _sync_organization(self, org: Dict, meraki_tag: Tag):
-        """Sync a single organization"""
+    def _sync_organization(self, org: Dict, meraki_tag: Tag, network_ids: Optional[List[str]] = None):
+        """Sync a single organization
+        
+        Args:
+            org: Organization data from Meraki API
+            meraki_tag: Tag to apply to synced objects
+            network_ids: Optional list of specific network IDs to sync (None = all networks)
+        """
         org_id = org['id']
         org_name = org['name']
         
@@ -258,8 +273,15 @@ class MerakiSyncService:
         # Get networks for this organization
         self.sync_log.add_progress_log(f"Fetching networks from organization: {org_name}", "info")
         networks = self.client.get_networks(org_id)
-        logger.info(f"Found {len(networks)} networks in {org_name}")
-        self.sync_log.add_progress_log(f"Found {len(networks)} networks in {org_name}", "info")
+        
+        # Filter networks if specific IDs provided
+        if network_ids:
+            networks = [n for n in networks if n['id'] in network_ids]
+            logger.info(f"Filtering to {len(networks)} selected networks in {org_name}")
+            self.sync_log.add_progress_log(f"Syncing {len(networks)} selected networks in {org_name}", "info")
+        else:
+            logger.info(f"Found {len(networks)} networks in {org_name}")
+            self.sync_log.add_progress_log(f"Found {len(networks)} networks in {org_name}", "info")
         
         for network in networks:
             try:
@@ -481,6 +503,15 @@ class MerakiSyncService:
             # For MX devices with WAN IP, create WAN interface and IP address
             if raw_wan_ip:
                 self._create_wan_interface_and_ip(serial, name, str(wan_ip), str(raw_wan_ip))
+            
+            # For MR (wireless) devices, sync SSIDs
+            if product_type.startswith('MR'):
+                try:
+                    device_obj = Device.objects.get(serial=serial)
+                    self._sync_device_ssids(device_obj, device)
+                except Exception as e:
+                    logger.warning(f"Could not sync SSIDs for {name}: {e}")
+            
             return
         
         # Review/Dry-run mode: Create staging entries for WAN interface and IP if applicable
@@ -1092,22 +1123,37 @@ class MerakiSyncService:
         
         try:
             if item_type == 'site':
-                site, _ = Site.objects.update_or_create(
+                # Generate slug for site
+                import re
+                slug = re.sub(r'[^a-z0-9-]+', '-', data['name'].lower()).strip('-')
+                if not slug:
+                    slug = f"site-{data.get('network_id', 'unknown')}"
+                
+                site, created = Site.objects.update_or_create(
                     name=data['name'],
                     defaults={
+                        'slug': slug,
                         'description': data.get('description', ''),
                         'comments': data.get('comments', ''),
                     }
                 )
+                logger.info(f"{'Created' if created else 'Updated'} site: {data['name']}")
                 # Apply site tags
                 tag_names = plugin_settings.get_tags_for_object_type('site')
                 for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
+                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
                     site.tags.add(tag)
                     
             elif item_type == 'device':
+                # Ensure site exists
+                try:
+                    site = Site.objects.get(name=data['site'])
+                except Site.DoesNotExist:
+                    raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
+                
                 manufacturer, _ = Manufacturer.objects.get_or_create(
-                    name=data.get('manufacturer', 'Cisco Meraki')
+                    name=data.get('manufacturer', 'Cisco Meraki'),
+                    defaults={'slug': 'cisco-meraki'}
                 )
                 device_type, _ = DeviceType.objects.get_or_create(
                     model=data['model'],
@@ -1121,9 +1167,8 @@ class MerakiSyncService:
                         'color': '2196f3'
                     }
                 )
-                site = Site.objects.get(name=data['site'])
                 
-                device, _ = Device.objects.update_or_create(
+                device, created = Device.objects.update_or_create(
                     serial=data['serial'],
                     defaults={
                         'name': data['name'],
@@ -1134,14 +1179,19 @@ class MerakiSyncService:
                         'comments': data.get('comments', ''),
                     }
                 )
+                logger.info(f"{'Created' if created else 'Updated'} device: {data['name']} (Serial: {data['serial']})")
                 # Apply device tags
                 tag_names = plugin_settings.get_tags_for_object_type('device')
                 for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
+                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
                     device.tags.add(tag)
                     
             elif item_type == 'vlan':
-                site = Site.objects.get(name=data['site'])
+                try:
+                    site = Site.objects.get(name=data['site'])
+                except Site.DoesNotExist:
+                    raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
+                    
                 # Generate proper slug
                 import re
                 vlan_group_slug = re.sub(r'[^a-z0-9-]+', '-', site.name.lower()).strip('-')
@@ -1153,7 +1203,7 @@ class MerakiSyncService:
                     name=f"{site.name} VLANs",
                     defaults={'slug': vlan_group_slug}
                 )
-                vlan, _ = VLAN.objects.update_or_create(
+                vlan, created = VLAN.objects.update_or_create(
                     vid=data['vid'],
                     group=vlan_group,
                     defaults={
@@ -1162,14 +1212,19 @@ class MerakiSyncService:
                         'description': data.get('description', ''),
                     }
                 )
+                logger.info(f"{'Created' if created else 'Updated'} VLAN {data['vid']}: {data['name']}")
                 # Apply VLAN tags
                 tag_names = plugin_settings.get_tags_for_object_type('vlan')
                 for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
+                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
                     vlan.tags.add(tag)
                     
             elif item_type == 'prefix':
-                site = Site.objects.get(name=data['site'])
+                try:
+                    site = Site.objects.get(name=data['site'])
+                except Site.DoesNotExist:
+                    raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
+                    
                 # Use get_or_create with site in the lookup to avoid conflicts across sites
                 prefix, created = Prefix.objects.get_or_create(
                     prefix=data['prefix'],
@@ -1185,10 +1240,11 @@ class MerakiSyncService:
                     prefix.description = data.get('description', '')
                     prefix.save()
                 
+                logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']}")
                 # Apply prefix tags
                 tag_names = plugin_settings.get_tags_for_object_type('prefix')
                 for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
+                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
                     prefix.tags.add(tag)
             
             elif item_type == 'interface':

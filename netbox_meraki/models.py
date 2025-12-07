@@ -737,7 +737,16 @@ class SyncReview(models.Model):
         service = MerakiSyncService()
         
         # Define the correct order for applying items (dependencies first)
-        item_order = ['site', 'vlan', 'prefix', 'device_type', 'device', 'interface', 'ip_address', 'ssid']
+        # Apply items in correct dependency order:
+        # 1. Sites first (devices need sites)
+        # 2. Device types (devices need device types)
+        # 3. VLANs (may reference sites)
+        # 4. Prefixes (may reference sites and VLANs)
+        # 5. Devices (need sites and device types)
+        # 6. Interfaces (need devices)
+        # 7. IP addresses (need interfaces and prefixes)
+        # 8. SSIDs (need devices)
+        item_order = ['site', 'device_type', 'vlan', 'prefix', 'device', 'interface', 'ip_address', 'ssid']
         
         # Apply items in dependency order
         for item_type in item_order:
