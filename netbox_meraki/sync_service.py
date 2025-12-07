@@ -1505,7 +1505,7 @@ class MerakiSyncService:
                 if not device_type_slug:
                     device_type_slug = f"device-{data['serial'].lower()}"
                 
-                device_type, _ = DeviceType.objects.get_or_create(
+                device_type, created = DeviceType.objects.get_or_create(
                     model=data['model'],
                     manufacturer=manufacturer,
                     defaults={
@@ -1513,6 +1513,13 @@ class MerakiSyncService:
                         'part_number': data['model']  # Use model as part number
                     }
                 )
+                
+                # Ensure part_number is always set (update existing device types if blank)
+                if not device_type.part_number:
+                    device_type.part_number = data['model']
+                    device_type.save()
+                    logger.info(f"Updated part_number for device type '{data['model']}'")
+
                 
                 # Get or create device role with product-type based defaults
                 product_type = data.get('product_type', '')
