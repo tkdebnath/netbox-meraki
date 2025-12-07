@@ -1,0 +1,202 @@
+{% extends 'netbox_meraki/base.html' %}
+{% load static %}
+
+{% block page_content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Edit Scheduled Task</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-10 offset-md-1">
+        <div class="card">
+            <div class="card-header">
+                <strong>{{ task.name }}</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                            <strong>Task Name</strong> <span class="text-danger">*</span>
+                        </label>
+                        {{ form.name }}
+                        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.frequency.id_for_label }}" class="form-label">
+                                    <strong>Frequency</strong> <span class="text-danger">*</span>
+                                </label>
+                                {{ form.frequency }}
+                                <small class="form-text text-muted">{{ form.frequency.help_text }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="{{ form.scheduled_datetime.id_for_label }}" class="form-label">
+                                    <strong>Start Date/Time</strong> <span class="text-danger">*</span>
+                                </label>
+                                {{ form.scheduled_datetime }}
+                                <small class="form-text text-muted">{{ form.scheduled_datetime.help_text }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6>Sync Configuration</h6>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.sync_mode.id_for_label }}" class="form-label">
+                            <strong>Sync Mode</strong> <span class="text-danger">*</span>
+                        </label>
+                        {{ form.sync_mode }}
+                        <small class="form-text text-muted">{{ form.sync_mode.help_text }}</small>
+                    </div>
+                    
+                    <div id="networkSelection" style="{% if task.sync_mode == 'selective' or task.sync_mode == 'single_network' %}display:block;{% else %}display:none;{% endif %}">
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Select Networks</strong></label>
+                            <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                                {% for org_name, networks in available_networks.items %}
+                                <div class="mb-2">
+                                    <strong>{{ org_name }}</strong>
+                                    {% for network in networks %}
+                                    <div class="form-check">
+                                        <input class="form-check-input network-checkbox" type="checkbox" 
+                                               value="{{ network.id }}" id="network_{{ network.id }}"
+                                               {% if network.id in task.selected_networks %}checked{% endif %}>
+                                        <label class="form-check-label" for="network_{{ network.id }}">
+                                            {{ network.name }}
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {{ form.selected_networks }}
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="mt-3">Sync Components</h6>
+                            <div class="form-check">
+                                {{ form.sync_organizations }}
+                                <label class="form-check-label" for="{{ form.sync_organizations.id_for_label }}">
+                                    Sync Organizations
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.sync_sites }}
+                                <label class="form-check-label" for="{{ form.sync_sites.id_for_label }}">
+                                    Sync Sites/Networks
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.sync_devices }}
+                                <label class="form-check-label" for="{{ form.sync_devices.id_for_label }}">
+                                    Sync Devices
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="mt-3">&nbsp;</h6>
+                            <div class="form-check">
+                                {{ form.sync_vlans }}
+                                <label class="form-check-label" for="{{ form.sync_vlans.id_for_label }}">
+                                    Sync VLANs
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ form.sync_prefixes }}
+                                <label class="form-check-label" for="{{ form.sync_prefixes.id_for_label }}">
+                                    Sync Prefixes/Subnets
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-check mt-3">
+                        {{ form.cleanup_orphaned }}
+                        <label class="form-check-label" for="{{ form.cleanup_orphaned.id_for_label }}">
+                            <strong>Cleanup Orphaned Objects</strong>
+                        </label>
+                        <small class="form-text text-muted d-block">Remove objects that no longer exist in Meraki</small>
+                    </div>
+                    
+                    <div class="form-check mt-3">
+                        {{ form.enabled }}
+                        <label class="form-check-label" for="{{ form.enabled.id_for_label }}">
+                            <strong>Enable Task</strong>
+                        </label>
+                        <small class="form-text text-muted d-block">Task will only run if enabled</small>
+                    </div>
+                    
+                    <hr>
+                    
+                    <div class="alert alert-info">
+                        <h6>Task History</h6>
+                        <ul class="mb-0">
+                            <li>Total Runs: {{ task.total_runs }}</li>
+                            <li>Successful: {{ task.successful_runs }}</li>
+                            <li>Failed: {{ task.failed_runs }}</li>
+                            {% if task.last_run %}
+                            <li>Last Run: {{ task.last_run|date:"Y-m-d H:i:s" }}</li>
+                            {% endif %}
+                            {% if task.next_run %}
+                            <li>Next Run: {{ task.next_run|date:"Y-m-d H:i:s" }}</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Save Changes</button>
+                        <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Handle sync mode changes
+document.getElementById('{{ form.sync_mode.id_for_label }}').addEventListener('change', function() {
+    var networkSelection = document.getElementById('networkSelection');
+    if (this.value === 'selective' || this.value === 'single_network') {
+        networkSelection.style.display = 'block';
+    } else {
+        networkSelection.style.display = 'none';
+    }
+});
+
+// Handle network selection
+document.querySelectorAll('.network-checkbox').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+        var selectedNetworks = [];
+        document.querySelectorAll('.network-checkbox:checked').forEach(function(cb) {
+            selectedNetworks.push(cb.value);
+        });
+        document.getElementById('{{ form.selected_networks.id_for_label }}').value = JSON.stringify(selectedNetworks);
+    });
+});
+
+// Initialize selected networks value
+document.addEventListener('DOMContentLoaded', function() {
+    var selectedNetworks = [];
+    document.querySelectorAll('.network-checkbox:checked').forEach(function(cb) {
+        selectedNetworks.push(cb.value);
+    });
+    if (selectedNetworks.length > 0) {
+        document.getElementById('{{ form.selected_networks.id_for_label }}').value = JSON.stringify(selectedNetworks);
+    }
+});
+</script>
+
+{% endblock %}

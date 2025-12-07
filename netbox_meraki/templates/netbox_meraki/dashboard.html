@@ -63,8 +63,8 @@
                 <a href="{% url 'plugins:netbox_meraki:sync' %}" class="btn btn-primary btn-block mb-2">
                     <i class="mdi mdi-sync"></i> Sync Now
                 </a>
-                <a href="/core/jobs/" class="btn btn-success btn-block mb-2">
-                    <i class="mdi mdi-clock-outline"></i> Scheduled Jobs
+                <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-success btn-block mb-2">
+                    <i class="mdi mdi-clock-outline"></i> Scheduled Sync
                 </a>
                 <a href="{% url 'plugins:netbox_meraki:review_list' %}" class="btn btn-info btn-block mb-2">
                     <i class="mdi mdi-playlist-check"></i> View Reviews

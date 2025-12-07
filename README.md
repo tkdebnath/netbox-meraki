@@ -280,13 +280,124 @@ Add tags to all synchronized objects:
 - **VLAN Tags**: Tags for VLANs
 - **Prefix Tags**: Tags for IP prefixes
 
-#### Scheduling Tab
+### Scheduled Synchronization
 
-Configure automatic synchronization:
-1. Enable **Scheduled Sync**
-2. Set **Sync Interval** (in seconds, default: 3600)
-3. Choose **Default Sync Mode**
-4. Jobs run automatically in the background
+The plugin provides a comprehensive scheduling system to automate synchronization tasks.
+
+#### Access Scheduled Sync
+
+Navigate to **Plugins > Meraki Sync > Scheduled Sync** or click **Scheduled Sync** from the dashboard.
+
+#### Creating a Scheduled Task
+
+1. Click **Create New Task** button
+2. Fill in task details:
+   - **Task Name**: Descriptive name (e.g., "Daily Full Sync")
+   - **Frequency**: One Time, Hourly, Daily, or Weekly
+   - **Start Date/Time**: When should the task first run
+
+3. Configure sync options:
+   - **Sync Mode**: Full Sync, Selective Networks, or Single Network
+   - **Select Networks**: Choose specific networks (for selective/single mode)
+   - **Sync Components**: Toggle organizations, sites, devices, VLANs, prefixes
+   - **Cleanup Orphaned**: Remove objects that no longer exist in Meraki
+   - **Enable Task**: Whether the task is active
+
+4. Click **Create Task**
+
+#### Managing Scheduled Tasks
+
+The scheduled sync page displays all tasks with:
+- Task name and sync mode
+- Frequency and next run time
+- Last run time and status
+- Success rate statistics
+- Enable/disable toggle
+- Edit and delete actions
+
+#### Running Scheduled Tasks
+
+##### Method 1: Cron Job (Recommended)
+
+Add to your crontab:
+
+```bash
+# Run every minute to check for due tasks
+* * * * * cd /opt/netbox && /opt/netbox/venv/bin/python manage.py run_scheduled_sync
+```
+
+##### Method 2: Systemd Timer
+
+Create `/etc/systemd/system/netbox-meraki-scheduler.service`:
+
+```ini
+[Unit]
+Description=NetBox Meraki Scheduled Sync
+After=network.target
+
+[Service]
+Type=oneshot
+User=netbox
+WorkingDirectory=/opt/netbox
+ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py run_scheduled_sync
+```
+
+Create `/etc/systemd/system/netbox-meraki-scheduler.timer`:
+
+```ini
+[Unit]
+Description=Run NetBox Meraki Scheduled Sync every minute
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable netbox-meraki-scheduler.timer
+sudo systemctl start netbox-meraki-scheduler.timer
+```
+
+##### Method 3: Continuous Service
+
+Run as a persistent background service:
+
+```bash
+cd /opt/netbox
+./venv/bin/python manage.py run_scheduled_sync --continuous --interval 60
+```
+
+Or create a systemd service:
+
+```ini
+[Unit]
+Description=NetBox Meraki Scheduler Service
+After=network.target
+
+[Service]
+Type=simple
+User=netbox
+WorkingDirectory=/opt/netbox
+ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py run_scheduled_sync --continuous
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### Task Execution and Monitoring
+
+- Tasks update their status in real-time (Pending → Running → Completed/Failed)
+- Failed tasks automatically retry at next scheduled time
+- Task history tracks total runs, successes, and failures
+- Last error message shown for failed tasks
+- Success rate calculated from historical executions
 
 #### API Performance Tab
 

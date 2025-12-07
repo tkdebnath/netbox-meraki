@@ -868,3 +868,145 @@ class ReviewItem(models.Model):
                     'new': new_value
                 }
         return changes
+
+
+class ScheduledSyncTask(models.Model):
+    """Model for scheduled sync tasks"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('running', 'Running'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    FREQUENCY_CHOICES = [
+        ('once', 'One Time'),
+        ('hourly', 'Hourly'),
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+    ]
+    
+    name = models.CharField(
+        max_length=200,
+        help_text='Descriptive name for this scheduled task'
+    )
+    
+    # Sync configuration (same as Sync Now page)
+    sync_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('full', 'Full Sync'),
+            ('selective', 'Selective Networks'),
+            ('single_network', 'Single Network'),
+        ],
+        default='full',
+        help_text='Type of sync to perform'
+    )
+    
+    selected_networks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of network IDs for selective/single network sync'
+    )
+    
+    sync_organizations = models.BooleanField(
+        default=True,
+        help_text='Sync organizations'
+    )
+    sync_sites = models.BooleanField(
+        default=True,
+        help_text='Sync sites/networks'
+    )
+    sync_devices = models.BooleanField(
+        default=True,
+        help_text='Sync devices'
+    )
+    sync_vlans = models.BooleanField(
+        default=True,
+        help_text='Sync VLANs'
+    )
+    sync_prefixes = models.BooleanField(
+        default=True,
+        help_text='Sync prefixes/subnets'
+    )
+    
+    cleanup_orphaned = models.BooleanField(
+        default=False,
+        help_text='Remove objects that no longer exist in Meraki'
+    )
+    
+    # Scheduling configuration
+    frequency = models.CharField(
+        max_length=20,
+        choices=FREQUENCY_CHOICES,
+        default='daily',
+        help_text='How often to run this task'
+    )
+    
+    scheduled_datetime = models.DateTimeField(
+        help_text='Date and time for first/next execution'
+    )
+    
+    last_run = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Last execution time'
+    )
+    
+    next_run = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Next scheduled execution time'
+    )
+    
+    # Task status
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text='Current status of the task'
+    )
+    
+    enabled = models.BooleanField(
+        default=True,
+        help_text='Whether this task is active'
+    )
+    
+    # Execution tracking
+    total_runs = models.IntegerField(
+        default=0,
+        help_text='Total number of times this task has run'
+    )
+    
+    successful_runs = models.IntegerField(
+        default=0,
+        help_text='Number of successful executions'
+    )
+    
+    failed_runs = models.IntegerField(
+        default=0,
+        help_text='Number of failed executions'
+    )
+    
+    last_error = models.TextField(
+        blank=True,
+        help_text='Error message from last failed run'
+    )
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.CharField(max_length=100, blank=True)
+    
+    class Meta:
+        ordering = ['next_run', 'scheduled_datetime']
+        verbose_name = 'Scheduled Sync Task'
+        verbose_name_plural = 'Scheduled Sync Tasks'
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_frequency_display()}) - {self.get_status_display()}"
+    
+    def get_absolute_url(self):
+        return reverse('plugins:netbox_meraki:scheduled_task_detail', kwargs={'pk': self.pk})

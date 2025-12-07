@@ -33,4 +33,11 @@ urlpatterns = [
     path('api/sync/<int:pk>/progress/', views.SyncProgressAPIView.as_view(), name='sync_progress_api'),
     path('api/sync/<int:pk>/cancel/', views.SyncCancelAPIView.as_view(), name='sync_cancel_api'),
     path('api/networks/<str:org_id>/', views.get_networks_for_org, name='get_networks_for_org'),
+    
+    # Scheduled Sync Tasks
+    path('scheduled-sync/', views.ScheduledSyncListView.as_view(), name='scheduled_sync'),
+    path('scheduled-sync/create/', views.ScheduledSyncTaskCreateView.as_view(), name='scheduled_task_create'),
+    path('scheduled-sync/<int:pk>/edit/', views.ScheduledSyncTaskEditView.as_view(), name='scheduled_task_edit'),
+    path('scheduled-sync/<int:pk>/toggle/', views.ScheduledSyncTaskToggleView.as_view(), name='scheduled_task_toggle'),
+    path('scheduled-sync/<int:pk>/delete/', views.ScheduledSyncTaskDeleteView.as_view(), name='scheduled_task_delete'),
 ]

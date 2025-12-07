@@ -2,16 +2,25 @@
 Views for NetBox Meraki plugin
 """
 import logging
+import json
+from datetime import datetime, timedelta
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import View, ListView, CreateView, UpdateView, DeleteView
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.conf import settings
 from django.urls import reverse_lazy
+from django.utils import timezone
 
 from .sync_service import MerakiSyncService
-from .models import SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, SyncReview, ReviewItem
-from .forms import PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm
+from .models import (
+    SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, 
+    SyncReview, ReviewItem, ScheduledSyncTask
+)
+from .forms import (
+    PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm,
+    ScheduledSyncTaskForm
+)
 
 
 logger = logging.getLogger('netbox_meraki')
@@ -546,3 +555,230 @@ def get_networks_for_org(request, org_id):
     except Exception as e:
         logger.error(f"Failed to fetch networks for org {org_id}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+class ScheduledSyncListView(LoginRequiredMixin, View):
+    """View for listing and managing scheduled sync tasks"""
+    
+    def get(self, request):
+        tasks = ScheduledSyncTask.objects.all().order_by('next_run', 'scheduled_datetime')
+        
+        # Get available networks for the create form
+        try:
+            sync_service = MerakiSyncService()
+            organizations = sync_service.client.get_organizations()
+            
+            available_networks = {}
+            for org in organizations:
+                networks = sync_service.client.get_networks(org['id'])
+                available_networks[org['name']] = [
+                    {'id': net['id'], 'name': net['name']}
+                    for net in networks
+                ]
+        except Exception as e:
+            logger.error(f"Failed to fetch networks: {e}")
+            available_networks = {}
+        
+        form = ScheduledSyncTaskForm()
+        
+        context = {
+            'tasks': tasks,
+            'form': form,
+            'available_networks': available_networks,
+        }
+        
+        return render(request, 'netbox_meraki/scheduled_sync.html', context)
+
+
+class ScheduledSyncTaskCreateView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Create a new scheduled sync task"""
+    
+    permission_required = 'dcim.add_device'
+    
+    def post(self, request):
+        # Handle checkbox fields
+        post_data = request.POST.copy()
+        checkbox_fields = [
+            'sync_organizations', 'sync_sites', 'sync_devices',
+            'sync_vlans', 'sync_prefixes', 'cleanup_orphaned', 'enabled'
+        ]
+        for field in checkbox_fields:
+            if field not in request.POST:
+                post_data[field] = ''
+        
+        # Parse selected networks from JSON
+        if 'selected_networks' in post_data:
+            try:
+                post_data['selected_networks'] = json.loads(post_data['selected_networks'])
+            except json.JSONDecodeError:
+                post_data['selected_networks'] = []
+        
+        form = ScheduledSyncTaskForm(post_data)
+        
+        if form.is_valid():
+            task = form.save(commit=False)
+            task.created_by = request.user.username
+            
+            # Calculate next run based on frequency and scheduled datetime
+            task.next_run = task.scheduled_datetime
+            
+            task.save()
+            
+            messages.success(
+                request,
+                f'Scheduled task "{task.name}" created successfully. '
+                f'Next run: {task.next_run.strftime("%Y-%m-%d %H:%M")}'
+            )
+            return redirect('plugins:netbox_meraki:scheduled_sync')
+        
+        # If form is invalid, reload the page with errors
+        tasks = ScheduledSyncTask.objects.all()
+        
+        try:
+            sync_service = MerakiSyncService()
+            organizations = sync_service.client.get_organizations()
+            available_networks = {}
+            for org in organizations:
+                networks = sync_service.client.get_networks(org['id'])
+                available_networks[org['name']] = [
+                    {'id': net['id'], 'name': net['name']}
+                    for net in networks
+                ]
+        except Exception:
+            available_networks = {}
+        
+        context = {
+            'tasks': tasks,
+            'form': form,
+            'available_networks': available_networks,
+        }
+        
+        for field, errors in form.errors.items():
+            for error in errors:
+                messages.error(request, f"{field}: {error}")
+        
+        return render(request, 'netbox_meraki/scheduled_sync.html', context)
+
+
+class ScheduledSyncTaskEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Edit an existing scheduled sync task"""
+    
+    permission_required = 'dcim.change_device'
+    
+    def get(self, request, pk):
+        task = get_object_or_404(ScheduledSyncTask, pk=pk)
+        
+        # Get available networks
+        try:
+            sync_service = MerakiSyncService()
+            organizations = sync_service.client.get_organizations()
+            available_networks = {}
+            for org in organizations:
+                networks = sync_service.client.get_networks(org['id'])
+                available_networks[org['name']] = [
+                    {'id': net['id'], 'name': net['name']}
+                    for net in networks
+                ]
+        except Exception:
+            available_networks = {}
+        
+        form = ScheduledSyncTaskForm(instance=task)
+        
+        context = {
+            'task': task,
+            'form': form,
+            'available_networks': available_networks,
+        }
+        
+        return render(request, 'netbox_meraki/scheduled_task_edit.html', context)
+    
+    def post(self, request, pk):
+        task = get_object_or_404(ScheduledSyncTask, pk=pk)
+        
+        # Handle checkbox fields
+        post_data = request.POST.copy()
+        checkbox_fields = [
+            'sync_organizations', 'sync_sites', 'sync_devices',
+            'sync_vlans', 'sync_prefixes', 'cleanup_orphaned', 'enabled'
+        ]
+        for field in checkbox_fields:
+            if field not in request.POST:
+                post_data[field] = ''
+        
+        # Parse selected networks from JSON
+        if 'selected_networks' in post_data:
+            try:
+                post_data['selected_networks'] = json.loads(post_data['selected_networks'])
+            except json.JSONDecodeError:
+                post_data['selected_networks'] = []
+        
+        form = ScheduledSyncTaskForm(post_data, instance=task)
+        
+        if form.is_valid():
+            task = form.save(commit=False)
+            
+            # Recalculate next run if schedule changed
+            if task.scheduled_datetime != task.next_run:
+                task.next_run = task.scheduled_datetime
+            
+            task.save()
+            
+            messages.success(request, f'Task "{task.name}" updated successfully.')
+            return redirect('plugins:netbox_meraki:scheduled_sync')
+        
+        # If form is invalid, show errors
+        try:
+            sync_service = MerakiSyncService()
+            organizations = sync_service.client.get_organizations()
+            available_networks = {}
+            for org in organizations:
+                networks = sync_service.client.get_networks(org['id'])
+                available_networks[org['name']] = [
+                    {'id': net['id'], 'name': net['name']}
+                    for net in networks
+                ]
+        except Exception:
+            available_networks = {}
+        
+        context = {
+            'task': task,
+            'form': form,
+            'available_networks': available_networks,
+        }
+        
+        for field, errors in form.errors.items():
+            for error in errors:
+                messages.error(request, f"{field}: {error}")
+        
+        return render(request, 'netbox_meraki/scheduled_task_edit.html', context)
+
+
+class ScheduledSyncTaskToggleView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Toggle enable/disable status of a scheduled task"""
+    
+    permission_required = 'dcim.change_device'
+    
+    def post(self, request, pk):
+        task = get_object_or_404(ScheduledSyncTask, pk=pk)
+        task.enabled = not task.enabled
+        task.save()
+        
+        status = "enabled" if task.enabled else "disabled"
+        messages.success(request, f'Task "{task.name}" {status}.')
+        
+        return redirect('plugins:netbox_meraki:scheduled_sync')
+
+
+class ScheduledSyncTaskDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Delete a scheduled sync task"""
+    
+    permission_required = 'dcim.delete_device'
+    
+    def post(self, request, pk):
+        task = get_object_or_404(ScheduledSyncTask, pk=pk)
+        task_name = task.name
+        task.delete()
+        
+        messages.success(request, f'Task "{task_name}" deleted successfully.')
+        return redirect('plugins:netbox_meraki:scheduled_sync')
+
