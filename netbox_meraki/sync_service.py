@@ -435,7 +435,27 @@ class MerakiSyncService:
             # Review/Dry-run mode: Use existing site or site name for device references
             site = existing_site if existing_site else site_name
         
-        # Process devices
+        # Sync VLANs and prefixes (now works in all modes via staging)
+        # Pass site name string so it works in review/dry-run mode
+        site_name_for_sync = site.name if isinstance(site, Site) else site
+        
+        # 1. Sync VLANs for this network FIRST (after site)
+        try:
+            self._sync_vlans(network_id, site_name_for_sync, meraki_tag)
+        except Exception as e:
+            error_msg = f"Error syncing VLANs for network {network_name}: {str(e)}"
+            logger.error(error_msg)
+            self.errors.append(error_msg)
+        
+        # 2. Sync prefixes for this network SECOND (after VLANs)
+        try:
+            self._sync_prefixes(network_id, site_name_for_sync, meraki_tag)
+        except Exception as e:
+            error_msg = f"Error syncing prefixes for network {network_name}: {str(e)}"
+            logger.error(error_msg)
+            self.errors.append(error_msg)
+        
+        # 3. Process devices LAST (after VLANs and prefixes)
         for device in devices:
             try:
                 self._sync_device(device, site, meraki_tag)
@@ -444,27 +464,6 @@ class MerakiSyncService:
                 error_msg = f"Error syncing device {device.get('name', device.get('serial'))}: {str(e)}"
                 logger.error(error_msg)
                 self.errors.append(error_msg)
-        
-        # Sync VLANs and prefixes (now works in all modes via staging)
-        # Pass site name string so it works in review/dry-run mode
-        site_name_for_sync = site.name if isinstance(site, Site) else site
-        
-        # Sync VLANs for this network
-        try:
-            self._sync_vlans(network_id, site_name_for_sync, meraki_tag)
-        except Exception as e:
-            error_msg = f"Error syncing VLANs for network {network_name}: {str(e)}"
-            logger.error(error_msg)
-            self.errors.append(error_msg)
-        
-        # Sync prefixes for this network
-        try:
-            self._sync_prefixes(network_id, site_name_for_sync, meraki_tag)
-        except Exception as e:
-            error_msg = f"Error syncing prefixes for network {network_name}: {str(e)}"
-            logger.error(error_msg)
-            self.errors.append(error_msg)
-            logger.info(f"Skipping VLANs/prefixes for new site '{site_name}' in review mode - will be synced after site is approved")
     
     def _sync_device(self, device: Dict, site: Site, meraki_tag: Tag):
         """Sync a single device"""
@@ -1355,16 +1354,20 @@ class MerakiSyncService:
                     prefix = existing_prefix
                     created = False
                 else:
-                    # Create new prefix
-                    prefix = Prefix.objects.create(
+                    # Create new prefix - use update_or_create with just prefix as lookup
+                    prefix, created = Prefix.objects.update_or_create(
                         prefix=data['prefix'],
-                        site=site,
-                        status='active',
-                        description=data.get('description', ''),
+                        defaults={
+                            'status': 'active',
+                            'description': data.get('description', ''),
+                        }
                     )
-                    created = True
+                    # Set the site separately after creation
+                    if prefix.site != site:
+                        prefix.site = site
+                        prefix.save()
                 
-                logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']}")
+                logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}")
                 # Apply prefix tags
                 tag_names = plugin_settings.get_tags_for_object_type('prefix')
                 for tag_name in tag_names:
