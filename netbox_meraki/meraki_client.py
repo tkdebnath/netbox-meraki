@@ -180,3 +180,17 @@ class MerakiAPIClient:
                 # Network doesn't have wireless or isn't configured
                 return []
             raise
+    
+    def get_network_firmware_upgrades(self, network_id: str) -> Dict:
+        """Get firmware upgrade information for a network
+        
+        Returns detailed firmware info including exact version in shortName field
+        Example: {"currentVersion": {"shortName": "MX 18.107.4", "firmware": "wired-18-1-07"}}
+        """
+        try:
+            return self._request('GET', f'networks/{network_id}/firmwareUpgrades')
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code in [400, 404]:
+                # Network doesn't support firmware upgrades API or not configured
+                return {}
+            raise

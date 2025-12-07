@@ -321,13 +321,38 @@ class MerakiSyncService:
         self.sync_log.add_progress_log(f"Fetching devices from network: {network_name}", "info")
         devices = self.client.get_devices(network_id)
         
-        # Merge firmware information from device statuses
+        # Fetch detailed firmware information from network firmware upgrades API
+        firmware_info_map = {}
+        try:
+            firmware_data = self.client.get_network_firmware_upgrades(network_id)
+            if firmware_data and 'products' in firmware_data:
+                # Map product types to their current firmware versions
+                for product_type, product_data in firmware_data.get('products', {}).items():
+                    current_version = product_data.get('currentVersion', {})
+                    if current_version:
+                        # Store shortName which has the full version like "MX 18.107.4"
+                        short_name = current_version.get('shortName', '')
+                        if short_name:
+                            firmware_info_map[product_type] = short_name
+                logger.debug(f"Fetched detailed firmware info for {len(firmware_info_map)} product types in {network_name}")
+        except Exception as e:
+            logger.debug(f"Could not fetch detailed firmware info for {network_name}: {e}")
+        
+        # Merge firmware information from device statuses and detailed firmware API
         firmware_count = 0
         for device in devices:
             serial = device.get('serial')
-            if serial and serial in device_status_map:
+            model = device.get('model', '')
+            product_type = device.get('productType', '')
+            
+            # Try to get detailed firmware version from network firmware upgrades API first
+            if product_type and product_type in firmware_info_map:
+                device['firmware'] = firmware_info_map[product_type]
+                firmware_count += 1
+                logger.debug(f"Set firmware for {serial} from firmware upgrades API: {firmware_info_map[product_type]}")
+            elif serial and serial in device_status_map:
+                # Fallback to device status API
                 status_info = device_status_map[serial]
-                # Merge firmware version from status API
                 if 'firmware' in status_info and status_info['firmware']:
                     device['firmware'] = status_info['firmware']
                     firmware_count += 1
@@ -591,6 +616,14 @@ class MerakiSyncService:
                             logger.info(f"✓ Created SVI interfaces for {name}")
                     except Exception as e:
                         logger.warning(f"Could not create SVI interfaces for {name}: {e}")
+                
+                # For MS devices, create switch port interfaces
+                if product_type.startswith('MS'):
+                    try:
+                        self._create_switch_port_interfaces(device_obj, serial)
+                        logger.info(f"✓ Created switch port interfaces for {name}")
+                    except Exception as e:
+                        logger.warning(f"Could not create switch port interfaces for {name}: {e}")
             except Exception as e:
                 review_item.status = 'failed'
                 review_item.error_message = str(e)
@@ -828,6 +861,80 @@ class MerakiSyncService:
             logger.error(f"Device with serial {device_serial} not found for WAN interface creation")
         except Exception as e:
             logger.error(f"Error creating WAN interface/IP for {device_name}: {e}")
+    
+    def _create_switch_port_interfaces(self, device: Device, serial: str):
+        """Create switch port interfaces for MS devices with port configuration"""
+        try:
+            # Fetch switch ports from Meraki API
+            ports = self.client.get_switch_ports(serial)
+            
+            if not ports:
+                logger.debug(f"No switch ports found for {device.name}")
+                return
+            
+            logger.info(f"Creating {len(ports)} switch port interfaces for {device.name}")
+            
+            for port in ports:
+                port_id = port.get('portId')
+                port_name = port.get('name', f"Port {port_id}")
+                enabled = port.get('enabled', True)
+                port_type = port.get('type', 'access')  # access or trunk
+                vlan = port.get('vlan')  # For access ports
+                allowed_vlans = port.get('allowedVlans', 'all')  # For trunk ports
+                voice_vlan = port.get('voiceVlan')
+                poe_enabled = port.get('poeEnabled', False)
+                
+                # Determine interface type based on port speed/type
+                interface_type = '1000base-t'  # Default to gigabit
+                if 'SFP' in port_name.upper() or 'uplink' in port_name.lower():
+                    interface_type = '10gbase-x-sfpp'
+                
+                # Build description
+                description_parts = []
+                if port_type == 'trunk':
+                    description_parts.append(f"Trunk (VLANs: {allowed_vlans})")
+                elif port_type == 'access' and vlan:
+                    description_parts.append(f"Access VLAN {vlan}")
+                
+                if voice_vlan:
+                    description_parts.append(f"Voice VLAN {voice_vlan}")
+                if poe_enabled:
+                    description_parts.append("PoE Enabled")
+                    
+                description = " | ".join(description_parts) if description_parts else "Switch port"
+                
+                # Create or update interface
+                interface, created = Interface.objects.update_or_create(
+                    device=device,
+                    name=port_id,
+                    defaults={
+                        'type': interface_type,
+                        'description': description,
+                        'enabled': enabled,
+                        'mode': 'tagged-all' if port_type == 'trunk' else 'access',
+                    }
+                )
+                
+                # For access ports, assign untagged VLAN
+                if port_type == 'access' and vlan:
+                    try:
+                        vlan_obj = VLAN.objects.filter(vid=vlan, site=device.site).first()
+                        if vlan_obj:
+                            interface.untagged_vlan = vlan_obj
+                            interface.save()
+                            logger.debug(f"Assigned VLAN {vlan} to {port_id} on {device.name}")
+                    except Exception as e:
+                        logger.debug(f"Could not assign VLAN {vlan} to {port_id}: {e}")
+                
+                if created:
+                    logger.debug(f"✓ Created interface {port_id} on {device.name}")
+                else:
+                    logger.debug(f"✓ Updated interface {port_id} on {device.name}")
+            
+            logger.info(f"✓ Configured {len(ports)} switch ports for {device.name}")
+            
+        except Exception as e:
+            logger.error(f"Error creating switch port interfaces for {device.name}: {e}")
     
     def _sync_device_interface(self, device: Device, meraki_device: Dict):
         """Sync primary interface for a device"""
@@ -1383,7 +1490,10 @@ class MerakiSyncService:
                 device_type, _ = DeviceType.objects.get_or_create(
                     model=data['model'],
                     manufacturer=manufacturer,
-                    defaults={'slug': device_type_slug}
+                    defaults={
+                        'slug': device_type_slug,
+                        'part_number': data['model']  # Use model as part number
+                    }
                 )
                 
                 # Get or create device role with product-type based defaults
