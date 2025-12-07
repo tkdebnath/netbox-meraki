@@ -68,10 +68,11 @@ class MerakiSyncService:
             }
         )
         if created:
-            firmware_field.content_types.set([device_ct])
+            # NetBox 4.x uses object_types instead of content_types
+            firmware_field.object_types.set([device_ct])
             logger.info("Created custom field: meraki_firmware")
-        elif device_ct not in firmware_field.content_types.all():
-            firmware_field.content_types.add(device_ct)
+        elif device_ct not in firmware_field.object_types.all():
+            firmware_field.object_types.add(device_ct)
         
         # Create SSID custom field for wireless APs
         ssid_field, created = CustomField.objects.get_or_create(
@@ -84,10 +85,11 @@ class MerakiSyncService:
             }
         )
         if created:
-            ssid_field.content_types.set([device_ct])
+            # NetBox 4.x uses object_types instead of content_types
+            ssid_field.object_types.set([device_ct])
             logger.info("Created custom field: meraki_ssids")
-        elif device_ct not in ssid_field.content_types.all():
-            ssid_field.content_types.add(device_ct)
+        elif device_ct not in ssid_field.object_types.all():
+            ssid_field.object_types.add(device_ct)
     
     def sync_all(self) -> SyncLog:
         """
