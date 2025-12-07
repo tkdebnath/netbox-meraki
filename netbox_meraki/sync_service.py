@@ -56,9 +56,9 @@ class MerakiSyncService:
         device_ct = ContentType.objects.get_for_model(Device)
         
         firmware_field, created = CustomField.objects.get_or_create(
-            name='meraki_firmware',
+            name='software_version',
             defaults={
-                'label': 'Meraki Firmware',
+                'label': 'Software Version',
                 'type': 'text',
                 'description': 'Firmware version from Meraki Dashboard',
                 'weight': 100,
@@ -66,12 +66,12 @@ class MerakiSyncService:
         )
         if created:
             firmware_field.object_types.set([device_ct])
-            logger.info("Created custom field: meraki_firmware")
+            logger.info("Created custom field: software_version")
         elif device_ct not in firmware_field.object_types.all():
             firmware_field.object_types.add(device_ct)
         
         mac_field, created = CustomField.objects.get_or_create(
-            name='meraki_mac_address',
+            name='mac_address',
             defaults={
                 'label': 'MAC Address',
                 'type': 'text',
@@ -81,7 +81,7 @@ class MerakiSyncService:
         )
         if created:
             mac_field.object_types.set([device_ct])
-            logger.info("Created custom field: meraki_mac_address")
+            logger.info("Created custom field: mac_address")
         elif device_ct not in mac_field.object_types.all():
             mac_field.object_types.add(device_ct)
     
@@ -566,9 +566,9 @@ class MerakiSyncService:
             'firmware': firmware_version,
             'comments': comments,
             'custom_field_data': {
-                'meraki_firmware': firmware_version if firmware_version != 'Unknown' else '',
+                'software_version': firmware_version if firmware_version != 'Unknown' else '',
                 'meraki_network_id': device.get('networkId', ''),
-                'meraki_mac_address': device.get('mac', ''),
+                'mac_address': device.get('mac', ''),
             }
         }
         
