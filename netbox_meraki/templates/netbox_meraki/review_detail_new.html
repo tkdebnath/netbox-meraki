@@ -1,0 +1,446 @@
+{% extends 'base/layout.html' %}
+{% load static %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Sync Review: {{ sync_log.timestamp }}</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:dashboard' %}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:review_list' %}">Reviews</a></li>
+                <li class="breadcrumb-item active">Review #{{ review.pk }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <strong>Review Status</strong>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <p><strong>Status:</strong> 
+                            {% if review.status == 'pending' %}
+                                <span class="badge bg-warning">{{ review.status|upper }}</span>
+                            {% elif review.status == 'approved' %}
+                                <span class="badge bg-success">{{ review.status|upper }}</span>
+                            {% elif review.status == 'rejected' %}
+                                <span class="badge bg-danger">{{ review.status|upper }}</span>
+                            {% elif review.status == 'partially_approved' %}
+                                <span class="badge bg-info">PARTIALLY APPROVED</span>
+                            {% elif review.status == 'applied' %}
+                                <span class="badge bg-primary">{{ review.status|upper }}</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Total Items:</strong> {{ review.items_total }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Approved:</strong> <span class="badge bg-success">{{ review.items_approved }}</span></p>
+                    </div>
+                    <div class="col-md-3">
+                        <p><strong>Rejected:</strong> <span class="badge bg-danger">{{ review.items_rejected }}</span></p>
+                    </div>
+                </div>
+                
+                {% if review.status not in 'applied' %}
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="approve_all">
+                            <button type="submit" class="btn btn-success me-2">
+                                <i class="mdi mdi-check-all"></i> Approve All
+                            </button>
+                        </form>
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="reject_all">
+                            <button type="submit" class="btn btn-danger me-2">
+                                <i class="mdi mdi-close-circle"></i> Reject All
+                            </button>
+                        </form>
+                        {% if review.items_approved > 0 %}
+                        <form method="post" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="apply">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="mdi mdi-cloud-upload"></i> Apply Approved Changes
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sites Section -->
+{% if site_items %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <strong><i class="mdi mdi-map-marker"></i> Sites ({{ site_items|length }})</strong>
+            </div>
+            <div class="card-body">
+                {% for item in site_items %}
+                <div class="card mb-3 {% if item.status == 'approved' %}border-success{% elif item.status == 'rejected' %}border-danger{% endif %}">
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <strong>{{ item.object_name }}</strong>
+                                <span class="badge {% if item.action_type == 'create' %}bg-success{% elif item.action_type == 'update' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.action_type|upper }}
+                                </span>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                {% if review.status not in 'applied' and item.status == 'pending' %}
+                                <a href="{% url 'plugins:netbox_meraki:review_item_edit' review.pk item.pk %}" class="btn btn-sm btn-info">
+                                    <i class="mdi mdi-pencil"></i> Edit
+                                </a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="badge {% if item.status == 'approved' %}bg-success{% elif item.status == 'rejected' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ item.status|upper }}
+                                </span>
+                                {% endif %}
+                                {% if item.editable_data %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="mdi mdi-pencil"></i> Edited
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <pre class="bg-light p-3 rounded">{{ item.preview_display }}</pre>
+                            </div>
+                        </div>
+                        {% if item.current_data %}
+                        <details class="mt-2">
+                            <summary class="text-muted" style="cursor: pointer;">Show current values</summary>
+                            <div class="mt-2">
+                                <pre class="bg-light p-3 rounded">{{ item.current_data|pprint }}</pre>
+                            </div>
+                        </details>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Devices Section -->
+{% if device_items %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <strong><i class="mdi mdi-server"></i> Devices ({{ device_items|length }})</strong>
+            </div>
+            <div class="card-body">
+                {% for item in device_items %}
+                <div class="card mb-3 {% if item.status == 'approved' %}border-success{% elif item.status == 'rejected' %}border-danger{% endif %}">
+                    <div class="card-header">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <strong>{{ item.object_name }}</strong>
+                                <span class="badge {% if item.action_type == 'create' %}bg-success{% elif item.action_type == 'update' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.action_type|upper }}
+                                </span>
+                                {% if item.related_object_info.site %}
+                                <span class="badge bg-info">Site: {{ item.related_object_info.site }}</span>
+                                {% endif %}
+                                {% if item.related_object_info.role %}
+                                <span class="badge bg-secondary">Role: {{ item.related_object_info.role }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                {% if review.status not in 'applied' and item.status == 'pending' %}
+                                <a href="{% url 'plugins:netbox_meraki:review_item_edit' review.pk item.pk %}" class="btn btn-sm btn-info">
+                                    <i class="mdi mdi-pencil"></i> Edit
+                                </a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="badge {% if item.status == 'approved' %}bg-success{% elif item.status == 'rejected' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ item.status|upper }}
+                                </span>
+                                {% endif %}
+                                {% if item.editable_data %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="mdi mdi-pencil"></i> Edited
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <pre class="bg-light p-3 rounded" style="white-space: pre-wrap;">{{ item.preview_display }}</pre>
+                            </div>
+                        </div>
+                        {% if item.current_data %}
+                        <details class="mt-2">
+                            <summary class="text-muted" style="cursor: pointer;">Show changes</summary>
+                            <div class="mt-2">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Field</th>
+                                            <th>Current</th>
+                                            <th>New</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for key, value in item.proposed_data.items %}
+                                        {% if item.current_data|keyvalue:key != value %}
+                                        <tr>
+                                            <td><strong>{{ key }}</strong></td>
+                                            <td><code>{{ item.current_data|keyvalue:key|default:"" }}</code></td>
+                                            <td><code class="text-success">{{ value }}</code></td>
+                                        </tr>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </details>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- VLANs Section -->
+{% if vlan_items %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <strong><i class="mdi mdi-lan"></i> VLANs ({{ vlan_items|length }})</strong>
+            </div>
+            <div class="card-body">
+                {% for item in vlan_items %}
+                <div class="card mb-2 {% if item.status == 'approved' %}border-success{% elif item.status == 'rejected' %}border-danger{% endif %}">
+                    <div class="card-body py-2">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <strong>{{ item.object_name }}</strong>
+                                <span class="badge {% if item.action_type == 'create' %}bg-success{% elif item.action_type == 'update' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.action_type|upper }}
+                                </span>
+                                <span class="text-muted">VID: {{ item.proposed_data.vid }}</span>
+                                {% if item.related_object_info.site %}
+                                <span class="badge bg-info">{{ item.related_object_info.site }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                {% if review.status not in 'applied' and item.status == 'pending' %}
+                                <a href="{% url 'plugins:netbox_meraki:review_item_edit' review.pk item.pk %}" class="btn btn-sm btn-info">
+                                    <i class="mdi mdi-pencil"></i> Edit
+                                </a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="badge {% if item.status == 'approved' %}bg-success{% elif item.status == 'rejected' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ item.status|upper }}
+                                </span>
+                                {% endif %}
+                                {% if item.editable_data %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="mdi mdi-pencil"></i> Edited
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Prefixes Section -->
+{% if prefix_items %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <strong><i class="mdi mdi-ip-network"></i> Prefixes ({{ prefix_items|length }})</strong>
+            </div>
+            <div class="card-body">
+                {% for item in prefix_items %}
+                <div class="card mb-2 {% if item.status == 'approved' %}border-success{% elif item.status == 'rejected' %}border-danger{% endif %}">
+                    <div class="card-body py-2">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <strong>{{ item.proposed_data.prefix }}</strong>
+                                <span class="badge {% if item.action_type == 'create' %}bg-success{% elif item.action_type == 'update' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.action_type|upper }}
+                                </span>
+                                {% if item.related_object_info.site %}
+                                <span class="badge bg-info">{{ item.related_object_info.site }}</span>
+                                {% endif %}
+                                {% if item.related_object_info.vlan %}
+                                <span class="badge bg-warning text-dark">VLAN: {{ item.related_object_info.vlan }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                {% if review.status not in 'applied' and item.status == 'pending' %}
+                                <a href="{% url 'plugins:netbox_meraki:review_item_edit' review.pk item.pk %}" class="btn btn-sm btn-info">
+                                    <i class="mdi mdi-pencil"></i> Edit
+                                </a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="badge {% if item.status == 'approved' %}bg-success{% elif item.status == 'rejected' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ item.status|upper }}
+                                </span>
+                                {% endif %}
+                                {% if item.editable_data %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="mdi mdi-pencil"></i> Edited
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- SSIDs Section -->
+{% if ssid_items %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <strong><i class="mdi mdi-wifi"></i> SSIDs ({{ ssid_items|length }})</strong>
+            </div>
+            <div class="card-body">
+                {% for item in ssid_items %}
+                <div class="card mb-2 {% if item.status == 'approved' %}border-success{% elif item.status == 'rejected' %}border-danger{% endif %}">
+                    <div class="card-body py-2">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <strong>{{ item.object_name }}</strong>
+                                <span class="badge {% if item.action_type == 'create' %}bg-success{% elif item.action_type == 'update' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.action_type|upper }}
+                                </span>
+                                {% if item.related_object_info.network %}
+                                <span class="badge bg-info">{{ item.related_object_info.network }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                {% if review.status not in 'applied' and item.status == 'pending' %}
+                                <a href="{% url 'plugins:netbox_meraki:review_item_edit' review.pk item.pk %}" class="btn btn-sm btn-info">
+                                    <i class="mdi mdi-pencil"></i> Edit
+                                </a>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="approve">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reject">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="badge {% if item.status == 'approved' %}bg-success{% elif item.status == 'rejected' %}bg-danger{% else %}bg-info{% endif %}">
+                                    {{ item.status|upper }}
+                                </span>
+                                {% endif %}
+                                {% if item.editable_data %}
+                                <span class="badge bg-warning text-dark ms-2">
+                                    <i class="mdi mdi-pencil"></i> Edited
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <a href="{% url 'plugins:netbox_meraki:review_list' %}" class="btn btn-secondary">
+            <i class="mdi mdi-arrow-left"></i> Back to Reviews
+        </a>
+    </div>
+</div>
+{% endblock %}

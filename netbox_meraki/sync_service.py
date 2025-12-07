@@ -8,10 +8,11 @@ from ipaddress import ip_network
 
 from django.db import transaction
 from django.utils import timezone
+from django.contrib.contenttypes.models import ContentType
 
 from dcim.models import Site, Device, DeviceType, DeviceRole, Manufacturer, Interface
 from ipam.models import VLAN, VLANGroup, Prefix, IPAddress
-from extras.models import Tag
+from extras.models import Tag, CustomField
 
 from .meraki_client import MerakiAPIClient
 from .models import SyncLog, PluginSettings, SiteNameRule, SyncReview, ReviewItem
@@ -35,8 +36,58 @@ class MerakiSyncService:
             'devices': 0,
             'vlans': 0,
             'prefixes': 0,
+            'ssids': 0,
+            'deleted_sites': 0,
+            'deleted_devices': 0,
+            'deleted_vlans': 0,
+            'deleted_prefixes': 0,
+            'updated_prefixes': 0,
         }
         self.errors = []
+        # Track all synced object IDs to detect orphans
+        self.synced_object_ids = {
+            'sites': set(),
+            'devices': set(),
+            'vlans': set(),
+            'prefixes': set(),
+        }
+        self._ensure_custom_fields()
+    
+    def _ensure_custom_fields(self):
+        """Ensure required custom fields exist"""
+        device_ct = ContentType.objects.get_for_model(Device)
+        
+        # Create firmware version custom field
+        firmware_field, created = CustomField.objects.get_or_create(
+            name='meraki_firmware',
+            defaults={
+                'label': 'Meraki Firmware',
+                'type': 'text',
+                'description': 'Firmware version from Meraki Dashboard',
+                'weight': 100,
+            }
+        )
+        if created:
+            firmware_field.content_types.set([device_ct])
+            logger.info("Created custom field: meraki_firmware")
+        elif device_ct not in firmware_field.content_types.all():
+            firmware_field.content_types.add(device_ct)
+        
+        # Create SSID custom field for wireless APs
+        ssid_field, created = CustomField.objects.get_or_create(
+            name='meraki_ssids',
+            defaults={
+                'label': 'Meraki SSIDs',
+                'type': 'text',
+                'description': 'SSIDs broadcast by this access point',
+                'weight': 101,
+            }
+        )
+        if created:
+            ssid_field.content_types.set([device_ct])
+            logger.info("Created custom field: meraki_ssids")
+        elif device_ct not in ssid_field.content_types.all():
+            ssid_field.content_types.add(device_ct)
     
     def sync_all(self) -> SyncLog:
         """
@@ -71,6 +122,8 @@ class MerakiSyncService:
         
         try:
             logger.info("Starting Meraki synchronization")
+            self.sync_log.add_progress_log("Starting Meraki synchronization", "info")
+            self.sync_log.update_progress("Initializing sync", 0)
             
             # Get or create Meraki tag
             meraki_tag, _ = Tag.objects.get_or_create(
@@ -79,17 +132,42 @@ class MerakiSyncService:
             )
             
             # Get all organizations
+            self.sync_log.add_progress_log("Fetching organizations from Meraki Dashboard", "info")
             organizations = self.client.get_organizations()
             logger.info(f"Found {len(organizations)} organizations")
+            self.sync_log.add_progress_log(f"Found {len(organizations)} organizations", "info")
             
-            for org in organizations:
+            total_orgs = len(organizations)
+            for idx, org in enumerate(organizations):
+                # Check for cancellation
+                if self.sync_log.check_cancel_requested():
+                    self.sync_log.add_progress_log("Sync cancelled by user", "warning")
+                    self.sync_log.status = 'failed'
+                    self.sync_log.message = "Sync cancelled by user"
+                    self.sync_log.save()
+                    logger.warning("Sync cancelled by user")
+                    return self.sync_log
+                
                 try:
+                    progress = int(((idx + 1) / total_orgs) * 80)  # 0-80% for orgs
+                    self.sync_log.update_progress(f"Syncing organization: {org.get('name')}", progress)
+                    self.sync_log.add_progress_log(f"Processing organization: {org.get('name')}", "info")
                     self._sync_organization(org, meraki_tag)
                     self.stats['organizations'] += 1
                 except Exception as e:
                     error_msg = f"Error syncing organization {org.get('name')}: {str(e)}"
                     logger.error(error_msg)
+                    self.sync_log.add_progress_log(error_msg, "error")
                     self.errors.append(error_msg)
+            
+            # Clean up orphaned objects (only in auto mode)
+            if self.sync_mode == 'auto':
+                self.sync_log.update_progress("Cleaning up orphaned objects", 85)
+                self.sync_log.add_progress_log("Cleaning up orphaned objects", "info")
+                logger.info("\nCleaning up orphaned objects...")
+                self._cleanup_orphaned_objects(meraki_tag)
+            
+            self.sync_log.update_progress("Finalizing sync", 100)
             
             # Update sync log
             duration = (datetime.now() - start_time).total_seconds()
@@ -112,6 +190,12 @@ class MerakiSyncService:
             self.sync_log.devices_synced = self.stats['devices']
             self.sync_log.vlans_synced = self.stats['vlans']
             self.sync_log.prefixes_synced = self.stats['prefixes']
+            self.sync_log.ssids_synced = self.stats['ssids']
+            self.sync_log.deleted_sites = self.stats.get('deleted_sites', 0)
+            self.sync_log.deleted_devices = self.stats.get('deleted_devices', 0)
+            self.sync_log.deleted_vlans = self.stats.get('deleted_vlans', 0)
+            self.sync_log.deleted_prefixes = self.stats.get('deleted_prefixes', 0)
+            self.sync_log.updated_prefixes = self.stats.get('updated_prefixes', 0)
             self.sync_log.errors = self.errors
             self.sync_log.duration_seconds = duration
             self.sync_log.save()
@@ -160,10 +244,25 @@ class MerakiSyncService:
         
         logger.info(f"Syncing network: {network_name}")
         
-        # Apply site name transformation rules
+        # Get devices in this network first to check if we should create the site
+        devices = self.client.get_devices(network_id)
+        logger.info(f"Found {len(devices)} devices in {network_name}")
+        
+        # Skip this network if it has no devices
+        if not devices:
+            logger.info(f"Skipping network '{network_name}' - no devices found")
+            return
+        
+        # Get plugin settings for transformations
+        plugin_settings = PluginSettings.get_settings()
+        
+        # Apply site name transformation rules first
         site_name = SiteNameRule.transform_network_name(network_name)
         if site_name != network_name:
             logger.info(f"Transformed site name: '{network_name}' -> '{site_name}'")
+        
+        # Apply name transformation setting
+        site_name = plugin_settings.transform_name(site_name, plugin_settings.site_name_transform)
         
         # Generate slug from site name
         import re
@@ -176,19 +275,18 @@ class MerakiSyncService:
             name=site_name,
             defaults={
                 'slug': slug,
-                'description': f"Meraki Network - {org_name}",
+                'description': network_name,
                 'comments': f"Meraki Network ID: {network_id}\nOriginal Network Name: {network_name}\nTimezone: {network.get('timeZone', 'N/A')}",
             }
         )
         
         if created:
-            logger.info(f"Created site: {network_name}")
+            logger.info(f"Created site: {site_name} (slug: {slug})")
+        else:
+            logger.debug(f"Updated site: {site_name}")
         
         site.tags.add(meraki_tag)
-        
-        # Get devices in this network
-        devices = self.client.get_devices(network_id)
-        logger.info(f"Found {len(devices)} devices in {network_name}")
+        self.synced_object_ids['sites'].add(site.id)
         
         for device in devices:
             try:
@@ -218,28 +316,46 @@ class MerakiSyncService:
     def _sync_device(self, device: Dict, site: Site, meraki_tag: Tag):
         """Sync a single device"""
         serial = device['serial']
-        name = device.get('name', serial)
+        name = device.get('name') or serial  # Use serial if name is None or empty
         model = device.get('model', 'Unknown')
         product_type = device.get('productType', '')
+        notes = device.get('notes', '')
+        tags = device.get('tags', [])
+        address = device.get('address', '')
         
         logger.debug(f"Syncing device: {name} ({serial})")
         
         # Get plugin settings
         plugin_settings = PluginSettings.get_settings()
         
+        # Apply device name transformation
+        name = plugin_settings.transform_name(name, plugin_settings.device_name_transform)
+        
         # Get or create manufacturer
-        manufacturer, _ = Manufacturer.objects.get_or_create(
+        manufacturer, created = Manufacturer.objects.get_or_create(
             name='Cisco Meraki'
         )
+        if created:
+            logger.info("Created manufacturer: Cisco Meraki")
         
         # Get or create device type
-        device_type, _ = DeviceType.objects.get_or_create(
+        device_type, created = DeviceType.objects.get_or_create(
             model=model,
             manufacturer=manufacturer,
             defaults={
                 'slug': model.lower().replace(' ', '-'),
+                'part_number': model,  # Use model as part number
             }
         )
+        if created:
+            logger.info(f"Created device type: {model} with part number: {model}")
+            self.sync_log.add_progress_log(f"Auto-created device type: {model}", "info")
+        else:
+            # Update part_number if it's missing
+            if not device_type.part_number:
+                device_type.part_number = model
+                device_type.save()
+                logger.info(f"Updated device type {model} with part number: {model}")
         
         # Get device role based on product type from settings
         role_name = plugin_settings.get_device_role_for_product(product_type)
@@ -304,47 +420,150 @@ class MerakiSyncService:
             return
         
         # Auto mode - create or update device immediately
-        netbox_device, created = Device.objects.update_or_create(
-            serial=serial,
-            defaults={
-                'name': name,
-                'device_type': device_type,
-                'device_role': device_role,
-                'site': site,
-                'status': 'active' if device.get('status') != 'offline' else 'offline',
-                'comments': f"MAC: {device.get('mac', 'N/A')}\n"
-                           f"LAN IP: {device.get('lanIp', 'N/A')}\n"
-                           f"Firmware: {device.get('firmware', 'N/A')}\n"
-                           f"Product Type: {device.get('productType', 'N/A')}",
-            }
-        )
+        device_comments = f"MAC: {device.get('mac', 'N/A')}\n" \
+                         f"LAN IP: {device.get('lanIp', 'N/A')}\n" \
+                         f"Serial: {serial}\n" \
+                         f"Product Type: {product_type}"
+        
+        if notes:
+            device_comments += f"\n\nNotes from Meraki:\n{notes}"
+        
+        if address:
+            device_comments += f"\n\nAddress: {address}"
+        
+        if tags:
+            device_comments += f"\n\nMeraki Tags: {', '.join(tags)}"
+        
+        # Check for duplicate serial numbers and merge if needed
+        existing_devices = Device.objects.filter(serial=serial)
+        if existing_devices.count() > 1:
+            # Keep the first one, delete others
+            primary_device = existing_devices.first()
+            for duplicate in existing_devices[1:]:
+                logger.warning(f"Deleting duplicate device with serial {serial}: {duplicate.name} (ID: {duplicate.id})")
+                duplicate.delete()
+            netbox_device = primary_device
+            created = False
+        else:
+            netbox_device, created = Device.objects.update_or_create(
+                serial=serial,
+                defaults={
+                    'name': name,
+                    'device_type': device_type,
+                    'device_role': device_role,
+                    'site': site,
+                    'status': 'active' if device.get('status') != 'offline' else 'offline',
+                    'comments': device_comments,
+                }
+            )
         
         if created:
-            logger.info(f"Created device: {name}")
+            logger.info(f"Created device: {name} (Serial: {serial})")
+        else:
+            # Ensure all fields are updated
+            netbox_device.name = name
+            netbox_device.device_type = device_type
+            netbox_device.device_role = device_role
+            netbox_device.site = site
+            netbox_device.status = 'active' if device.get('status') != 'offline' else 'offline'
+            netbox_device.comments = device_comments
+            logger.debug(f"Updated device: {name} (Serial: {serial})")
         
+        # Set custom field for firmware version
+        firmware = device.get('firmware', '')
+        if firmware:
+            netbox_device.custom_field_data['meraki_firmware'] = firmware
+        
+        # For wireless APs (MR), fetch and store SSIDs
+        if product_type and product_type.startswith('MR'):
+            self._sync_device_ssids(netbox_device, device)
+        
+        netbox_device.save()
         netbox_device.tags.add(meraki_tag)
+        self.synced_object_ids['devices'].add(netbox_device.id)
         
-        # Sync interfaces if available
+        # Sync management interface if available
         if device.get('lanIp'):
             self._sync_device_interface(netbox_device, device)
+        
+        # Sync switch ports for MS (switches)
+        if product_type and product_type.startswith('MS'):
+            self._sync_switch_ports(netbox_device, serial, meraki_tag)
+    
+    def _sync_device_ssids(self, device: Device, meraki_device: Dict):
+        """Fetch and store SSIDs for wireless access points"""
+        try:
+            # Get the network ID from device
+            network_id = meraki_device.get('networkId')
+            if not network_id:
+                return
+            
+            # Get plugin settings for transformations
+            plugin_settings = PluginSettings.get_settings()
+            
+            # Fetch SSIDs for this network
+            try:
+                ssids = self.client.get_wireless_ssids(network_id)
+                if ssids:
+                    # Filter enabled SSIDs and get their names
+                    enabled_ssids = [
+                        plugin_settings.transform_name(
+                            ssid.get('name', f"SSID {ssid.get('number', '')}"),
+                            plugin_settings.ssid_name_transform
+                        )
+                        for ssid in ssids
+                        if ssid.get('enabled', False)
+                    ]
+                    if enabled_ssids:
+                        ssid_list = ', '.join(enabled_ssids)
+                        device.custom_field_data['meraki_ssids'] = ssid_list
+                        self.stats['ssids'] += len(enabled_ssids)
+                        logger.debug(f"Added SSIDs to AP {device.name}: {ssid_list}")
+            except Exception as e:
+                logger.debug(f"Could not fetch SSIDs for AP {device.name}: {e}")
+        except Exception as e:
+            logger.warning(f"Error syncing SSIDs for device {device.name}: {e}")
     
     def _sync_device_interface(self, device: Device, meraki_device: Dict):
         """Sync primary interface for a device"""
         lan_ip = meraki_device.get('lanIp')
         mac = meraki_device.get('mac')
+        product_type = meraki_device.get('productType', '')
         
         if not lan_ip:
             return
+        
+        # Determine interface type based on product
+        interface_type = 'other'
+        if product_type.startswith('MX'):
+            interface_type = '1000base-t'  # Most MX appliances have gigabit
+        elif product_type.startswith('MS'):
+            interface_type = '1000base-t'  # Switches
+        elif product_type.startswith('MR'):
+            interface_type = 'ieee802.11ac'  # Wireless APs
+        
+        # Build interface description
+        description = f"Management interface for {meraki_device.get('name', device.name)}"
+        if meraki_device.get('firmware'):
+            description += f" (Firmware: {meraki_device.get('firmware')})"
         
         # Create or update management interface
         interface, created = Interface.objects.get_or_create(
             device=device,
             name='Management',
             defaults={
-                'type': 'other',
+                'type': interface_type,
                 'mac_address': mac if mac else None,
+                'description': description,
             }
         )
+        
+        # Update description if interface already exists
+        if not created:
+            interface.description = description
+            if mac and not interface.mac_address:
+                interface.mac_address = mac
+            interface.save()
         
         # Create or update IP address
         try:
@@ -352,21 +571,157 @@ class MerakiSyncService:
                 address=f"{lan_ip}/32",
                 defaults={
                     'status': 'active',
-                    'assigned_object': interface,
+                    'dns_name': meraki_device.get('name', ''),
+                    'description': f"Management IP for {device.name}",
                 }
             )
             
-            if not created and ip_address.assigned_object != interface:
+            # Assign to interface if not already assigned
+            if not created:
+                if ip_address.assigned_object != interface:
+                    ip_address.assigned_object = interface
+                    ip_address.save()
+            else:
                 ip_address.assigned_object = interface
                 ip_address.save()
+                logger.debug(f"Created IP address {lan_ip} for {device.name}")
             
             # Set as primary IP
             if not device.primary_ip4:
                 device.primary_ip4 = ip_address
                 device.save()
+                logger.debug(f"Set {lan_ip} as primary IP for {device.name}")
                 
         except Exception as e:
             logger.warning(f"Could not create IP address {lan_ip} for device {device.name}: {e}")
+    
+    def _sync_switch_ports(self, device: Device, serial: str, meraki_tag: Tag):
+        """Sync switch ports for MS devices"""
+        try:
+            ports = self.client.get_switch_ports(serial)
+            if not ports:
+                return
+            
+            logger.info(f"Syncing {len(ports)} switch ports for {device.name}")
+            
+            for port_data in ports:
+                try:
+                    port_id = port_data.get('portId', '')
+                    port_name = port_data.get('name', f"Port {port_id}")
+                    enabled = port_data.get('enabled', True)
+                    port_type = port_data.get('type', 'access')
+                    vlan = port_data.get('vlan')
+                    voice_vlan = port_data.get('voiceVlan')
+                    allowed_vlans = port_data.get('allowedVlans', '')
+                    poe_enabled = port_data.get('poeEnabled', False)
+                    link_negotiation = port_data.get('linkNegotiation', '')
+                    
+                    # Determine interface type based on link negotiation
+                    interface_type = '1000base-t'  # Default to gigabit
+                    if 'Auto negotiate' in str(link_negotiation):
+                        interface_type = '1000base-t'
+                    elif '10 Gigabit' in str(link_negotiation):
+                        interface_type = '10gbase-t'
+                    elif '100 Megabit' in str(link_negotiation):
+                        interface_type = '100base-tx'
+                    
+                    # Build description
+                    description_parts = []
+                    if port_type == 'trunk':
+                        description_parts.append(f"Trunk port")
+                        if allowed_vlans:
+                            description_parts.append(f"Allowed VLANs: {allowed_vlans}")
+                    else:
+                        description_parts.append(f"Access port")
+                        if vlan:
+                            description_parts.append(f"VLAN {vlan}")
+                    
+                    if voice_vlan:
+                        description_parts.append(f"Voice VLAN {voice_vlan}")
+                    if poe_enabled:
+                        description_parts.append("PoE Enabled")
+                    
+                    description = " | ".join(description_parts) if description_parts else port_name
+                    
+                    # Determine mode
+                    mode = ''
+                    if port_type == 'trunk':
+                        mode = 'tagged'
+                    elif port_type == 'access':
+                        mode = 'access'
+                    
+                    # Create or update interface
+                    interface, created = Interface.objects.update_or_create(
+                        device=device,
+                        name=port_name,
+                        defaults={
+                            'type': interface_type,
+                            'enabled': enabled,
+                            'mode': mode,
+                            'description': description,
+                        }
+                    )
+                    
+                    if created:
+                        logger.debug(f"Created interface {port_name} on {device.name}")
+                    
+                    # Assign untagged VLAN for access ports
+                    if port_type == 'access' and vlan:
+                        # Find VLAN in the site's VLAN group
+                        vlan_group_name = f"{device.site.name} VLANs"
+                        vlan_obj = VLAN.objects.filter(
+                            vid=vlan,
+                            group__name=vlan_group_name
+                        ).first()
+                        
+                        if vlan_obj:
+                            interface.untagged_vlan = vlan_obj
+                            interface.save()
+                            logger.debug(f"Assigned VLAN {vlan} to interface {port_name}")
+                    
+                    # For trunk ports, assign tagged VLANs
+                    if port_type == 'trunk' and allowed_vlans and allowed_vlans != 'all':
+                        vlan_group_name = f"{device.site.name} VLANs"
+                        # Parse allowed VLANs (can be ranges like "10-20,30,40-50")
+                        vlan_ids = self._parse_vlan_list(allowed_vlans)
+                        
+                        tagged_vlans = VLAN.objects.filter(
+                            vid__in=vlan_ids,
+                            group__name=vlan_group_name
+                        )
+                        
+                        if tagged_vlans.exists():
+                            interface.tagged_vlans.set(tagged_vlans)
+                            logger.debug(f"Assigned tagged VLANs to interface {port_name}: {allowed_vlans}")
+                    
+                    interface.tags.add(meraki_tag)
+                    
+                except Exception as e:
+                    logger.warning(f"Could not sync port {port_data.get('portId')} on {device.name}: {e}")
+                    
+        except Exception as e:
+            logger.debug(f"Could not fetch switch ports for {device.name}: {e}")
+    
+    def _parse_vlan_list(self, vlan_string: str) -> List[int]:
+        """Parse VLAN list string like '10-20,30,40-50' into list of VLAN IDs"""
+        vlan_ids = []
+        if not vlan_string or vlan_string == 'all':
+            return vlan_ids
+        
+        try:
+            for part in vlan_string.split(','):
+                part = part.strip()
+                if '-' in part:
+                    # Range like "10-20"
+                    start, end = part.split('-')
+                    vlan_ids.extend(range(int(start), int(end) + 1))
+                else:
+                    # Single VLAN
+                    vlan_ids.append(int(part))
+        except Exception as e:
+            logger.warning(f"Could not parse VLAN list '{vlan_string}': {e}")
+        
+        return vlan_ids
     
     def _sync_vlans(self, network_id: str, site: Site, meraki_tag: Tag):
         """Sync VLANs for a network"""
@@ -383,16 +738,31 @@ class MerakiSyncService:
         logger.info(f"Syncing {len(vlans)} VLANs for {site.name}")
         
         # Create or get VLAN group for this site
-        vlan_group, _ = VLANGroup.objects.get_or_create(
+        import re
+        vlan_group_slug = re.sub(r'[^a-z0-9-]+', '-', site.name.lower()).strip('-')
+        if not vlan_group_slug:
+            vlan_group_slug = f"site-{site.id}"
+        vlan_group_slug = f"{vlan_group_slug}-vlans"
+        
+        vlan_group, created = VLANGroup.objects.get_or_create(
             name=f"{site.name} VLANs",
             defaults={
-                'slug': f"{site.name.lower().replace(' ', '-')}-vlans",
+                'slug': vlan_group_slug,
             }
         )
+        
+        if created:
+            logger.info(f"Created VLAN group: {vlan_group.name}")
+        
+        # Get plugin settings for transformations
+        plugin_settings = PluginSettings.get_settings()
         
         for vlan_data in vlans:
             vlan_id = vlan_data.get('id')
             vlan_name = vlan_data.get('name', f"VLAN {vlan_id}")
+            
+            # Apply VLAN name transformation
+            vlan_name = plugin_settings.transform_name(vlan_name, plugin_settings.vlan_name_transform)
             
             try:
                 vlan, created = VLAN.objects.update_or_create(
@@ -406,9 +776,12 @@ class MerakiSyncService:
                 )
                 
                 if created:
-                    logger.debug(f"Created VLAN {vlan_id}: {vlan_name}")
+                    logger.info(f"Created VLAN {vlan_id}: {vlan_name} in {site.name}")
+                else:
+                    logger.debug(f"Updated VLAN {vlan_id}: {vlan_name}")
                 
                 vlan.tags.add(meraki_tag)
+                self.synced_object_ids['vlans'].add(vlan.id)
                 self.stats['vlans'] += 1
                 
             except Exception as e:
@@ -428,8 +801,14 @@ class MerakiSyncService:
         
         logger.info(f"Syncing {len(subnets)} prefixes for {site.name}")
         
+        # Get VLAN group for this site
+        vlan_group_name = f"{site.name} VLANs"
+        vlan_group = VLANGroup.objects.filter(name=vlan_group_name).first()
+        
         for subnet_data in subnets:
             subnet = subnet_data.get('subnet')
+            vlan_id = subnet_data.get('vlan_id')
+            vlan_name = subnet_data.get('vlan_name', '')
             
             if not subnet:
                 continue
@@ -438,19 +817,48 @@ class MerakiSyncService:
                 # Validate subnet format
                 network = ip_network(subnet, strict=False)
                 
+                # Try to find the corresponding VLAN
+                vlan = None
+                if vlan_id and vlan_group:
+                    vlan = VLAN.objects.filter(
+                        vid=vlan_id,
+                        group=vlan_group
+                    ).first()
+                
+                # Check if prefix exists and needs site update
+                existing_prefix = Prefix.objects.filter(prefix=str(network)).first()
+                site_changed = False
+                
+                if existing_prefix and existing_prefix.site and existing_prefix.site.id != site.id:
+                    logger.info(f"Prefix {network} site changed: {existing_prefix.site.name} -> {site.name}")
+                    site_changed = True
+                    self.stats['updated_prefixes'] += 1
+                
+                # Prepare prefix defaults
+                prefix_defaults = {
+                    'site_id': site.id,
+                    'status': 'active',
+                    'description': f"VLAN {vlan_id}: {vlan_name}" if vlan_id else "Meraki Subnet",
+                }
+                
+                # Add VLAN if found
+                if vlan:
+                    prefix_defaults['vlan_id'] = vlan.id
+                
                 prefix, created = Prefix.objects.update_or_create(
                     prefix=str(network),
-                    defaults={
-                        'site': site,
-                        'status': 'active',
-                        'description': f"VLAN {subnet_data.get('vlan_id')}: {subnet_data.get('vlan_name', '')}",
-                    }
+                    defaults=prefix_defaults
                 )
                 
                 if created:
-                    logger.debug(f"Created prefix: {network}")
+                    logger.debug(f"Created prefix: {network} (Site: {site.name}, VLAN: {vlan_id})")
+                elif site_changed:
+                    logger.info(f"Updated prefix site: {network} -> {site.name}")
+                else:
+                    logger.debug(f"Updated prefix: {network} (Site: {site.name}, VLAN: {vlan_id})")
                 
                 prefix.tags.add(meraki_tag)
+                self.synced_object_ids['prefixes'].add(prefix.id)
                 self.stats['prefixes'] += 1
                 
             except Exception as e:
@@ -458,9 +866,92 @@ class MerakiSyncService:
     
     def _create_review_item(self, item_type: str, action_type: str, object_name: str, 
                            object_identifier: str, proposed_data: Dict, current_data: Optional[Dict] = None):
-        """Create a review item for manual approval"""
+        """Create a review item for manual approval with detailed preview"""
         if not self.review:
             return None
+        
+        # Generate human-readable preview and related object info
+        preview_display = ""
+        related_object_info = {}
+        
+        if item_type == 'site':
+            preview_display = f"**Name:** {proposed_data.get('name', 'N/A')}\n"
+            preview_display += f"**Network ID:** {proposed_data.get('network_id', 'N/A')}\n"
+            preview_display += f"**Time Zone:** {proposed_data.get('timezone', 'N/A')}\n"
+            if proposed_data.get('description'):
+                preview_display += f"**Description:** {proposed_data['description']}\n"
+            related_object_info['network_id'] = proposed_data.get('network_id')
+            
+        elif item_type == 'device':
+            preview_display = f"**Name:** {proposed_data.get('name', 'N/A')}\n"
+            preview_display += f"**Serial:** {proposed_data.get('serial', 'N/A')}\n"
+            preview_display += f"**Model:** {proposed_data.get('model', 'N/A')}\n"
+            preview_display += f"**Manufacturer:** {proposed_data.get('manufacturer', 'N/A')}\n"
+            preview_display += f"**Device Role:** {proposed_data.get('role', 'N/A')}\n"
+            preview_display += f"**Site:** {proposed_data.get('site', 'N/A')}\n"
+            preview_display += f"**Status:** {proposed_data.get('status', 'active')}\n"
+            preview_display += f"**Product Type:** {proposed_data.get('product_type', 'N/A')}\n"
+            preview_display += f"**MAC Address:** {proposed_data.get('mac', 'N/A')}\n"
+            preview_display += f"**LAN IP:** {proposed_data.get('lan_ip', 'N/A')}\n"
+            preview_display += f"**Firmware:** {proposed_data.get('firmware', 'N/A')}\n"
+            related_object_info = {
+                'site': proposed_data.get('site'),
+                'role': proposed_data.get('role'),
+                'model': proposed_data.get('model'),
+                'manufacturer': proposed_data.get('manufacturer'),
+            }
+            
+        elif item_type == 'device_type':
+            preview_display = f"**Model:** {proposed_data.get('model', 'N/A')}\n"
+            preview_display += f"**Manufacturer:** {proposed_data.get('manufacturer', 'N/A')}\n"
+            preview_display += f"**Part Number:** {proposed_data.get('part_number', 'N/A')}\n"
+            preview_display += f"**Slug:** {proposed_data.get('slug', 'N/A')}\n"
+            related_object_info = {
+                'manufacturer': proposed_data.get('manufacturer'),
+            }
+            
+        elif item_type == 'vlan':
+            preview_display = f"**Name:** {proposed_data.get('name', 'N/A')}\n"
+            preview_display += f"**VID:** {proposed_data.get('vid', 'N/A')}\n"
+            preview_display += f"**Site:** {proposed_data.get('site', 'N/A')}\n"
+            if proposed_data.get('description'):
+                preview_display += f"**Description:** {proposed_data['description']}\n"
+            related_object_info = {
+                'site': proposed_data.get('site'),
+            }
+            
+        elif item_type == 'prefix':
+            preview_display = f"**Prefix:** {proposed_data.get('prefix', 'N/A')}\n"
+            preview_display += f"**Site:** {proposed_data.get('site', 'N/A')}\n"
+            preview_display += f"**VLAN:** {proposed_data.get('vlan', 'N/A')}\n"
+            preview_display += f"**Status:** {proposed_data.get('status', 'active')}\n"
+            if proposed_data.get('description'):
+                preview_display += f"**Description:** {proposed_data['description']}\n"
+            related_object_info = {
+                'site': proposed_data.get('site'),
+                'vlan': proposed_data.get('vlan'),
+            }
+            
+        elif item_type == 'interface':
+            preview_display = f"**Name:** {proposed_data.get('name', 'N/A')}\n"
+            preview_display += f"**Device:** {proposed_data.get('device', 'N/A')}\n"
+            preview_display += f"**Type:** {proposed_data.get('type', 'N/A')}\n"
+            preview_display += f"**MAC Address:** {proposed_data.get('mac_address', 'N/A')}\n"
+            if proposed_data.get('description'):
+                preview_display += f"**Description:** {proposed_data['description']}\n"
+            related_object_info = {
+                'device': proposed_data.get('device'),
+            }
+            
+        elif item_type == 'ssid':
+            preview_display = f"**SSID Name:** {proposed_data.get('name', 'N/A')}\n"
+            preview_display += f"**Network:** {proposed_data.get('network', 'N/A')}\n"
+            preview_display += f"**Enabled:** {proposed_data.get('enabled', False)}\n"
+            if proposed_data.get('auth_mode'):
+                preview_display += f"**Auth Mode:** {proposed_data['auth_mode']}\n"
+            related_object_info = {
+                'network': proposed_data.get('network'),
+            }
         
         return ReviewItem.objects.create(
             review=self.review,
@@ -470,6 +961,8 @@ class MerakiSyncService:
             object_identifier=object_identifier,
             proposed_data=proposed_data,
             current_data=current_data,
+            preview_display=preview_display,
+            related_object_info=related_object_info,
             status='pending'
         )
     
@@ -480,74 +973,125 @@ class MerakiSyncService:
     def apply_review_item(self, item: 'ReviewItem'):
         """Apply an approved review item"""
         item_type = item.item_type
-        proposed_data = item.proposed_data
+        # Use editable_data if it exists, otherwise use proposed_data
+        data = item.get_final_data()
         
         try:
             if item_type == 'site':
                 Site.objects.update_or_create(
-                    name=proposed_data['name'],
+                    name=data['name'],
                     defaults={
-                        'description': proposed_data.get('description', ''),
-                        'comments': proposed_data.get('comments', ''),
+                        'description': data.get('description', ''),
+                        'comments': data.get('comments', ''),
                     }
                 )
             elif item_type == 'device':
                 manufacturer, _ = Manufacturer.objects.get_or_create(
-                    name=proposed_data.get('manufacturer', 'Cisco Meraki')
+                    name=data.get('manufacturer', 'Cisco Meraki')
                 )
                 device_type, _ = DeviceType.objects.get_or_create(
-                    model=proposed_data['model'],
+                    model=data['model'],
                     manufacturer=manufacturer,
-                    defaults={'slug': proposed_data['model'].lower().replace(' ', '-')}
+                    defaults={'slug': data['model'].lower().replace(' ', '-')}
                 )
                 device_role, _ = DeviceRole.objects.get_or_create(
-                    name=proposed_data['role'],
+                    name=data['role'],
                     defaults={
-                        'slug': proposed_data['role'].lower().replace(' ', '-'),
+                        'slug': data['role'].lower().replace(' ', '-'),
                         'color': '2196f3'
                     }
                 )
-                site = Site.objects.get(name=proposed_data['site'])
+                site = Site.objects.get(name=data['site'])
                 
                 Device.objects.update_or_create(
-                    serial=proposed_data['serial'],
+                    serial=data['serial'],
                     defaults={
-                        'name': proposed_data['name'],
+                        'name': data['name'],
                         'device_type': device_type,
                         'device_role': device_role,
                         'site': site,
-                        'status': proposed_data.get('status', 'active'),
-                        'comments': proposed_data.get('comments', ''),
+                        'status': data.get('status', 'active'),
+                        'comments': data.get('comments', ''),
                     }
                 )
             elif item_type == 'vlan':
-                site = Site.objects.get(name=proposed_data['site'])
+                site = Site.objects.get(name=data['site'])
                 vlan_group, _ = VLANGroup.objects.get_or_create(
                     name=f"{site.name} VLANs",
                     defaults={'slug': f"{site.name.lower().replace(' ', '-')}-vlans"}
                 )
                 VLAN.objects.update_or_create(
-                    vid=proposed_data['vid'],
+                    vid=data['vid'],
                     group=vlan_group,
                     defaults={
-                        'name': proposed_data['name'],
+                        'name': data['name'],
                         'status': 'active',
-                        'description': proposed_data.get('description', ''),
+                        'description': data.get('description', ''),
                     }
                 )
             elif item_type == 'prefix':
-                site = Site.objects.get(name=proposed_data['site'])
+                site = Site.objects.get(name=data['site'])
                 Prefix.objects.update_or_create(
-                    prefix=proposed_data['prefix'],
+                    prefix=data['prefix'],
                     defaults={
                         'site': site,
                         'status': 'active',
-                        'description': proposed_data.get('description', ''),
+                        'description': data.get('description', ''),
                     }
                 )
             
             logger.info(f"Applied review item: {item.action_type} {item.item_type} - {item.object_name}")
             
         except Exception as e:
-            logger.error(f"Failed to apply review item {item.id}: {e}")
+            logger.error(f"Failed to apply review item {item.item_type} - {item.object_name}: {e}")
             raise
+    
+    def _cleanup_orphaned_objects(self, meraki_tag: Tag):
+        """Delete objects with meraki tag that were not synced in this run"""
+        logger.info("Checking for orphaned objects to clean up...")
+        
+        # Clean up sites
+        all_meraki_sites = Site.objects.filter(tags=meraki_tag)
+        orphaned_sites = all_meraki_sites.exclude(id__in=self.synced_object_ids['sites'])
+        if orphaned_sites.exists():
+            count = orphaned_sites.count()
+            for site in orphaned_sites:
+                logger.info(f"Deleting orphaned site: {site.name} (ID: {site.id})")
+            orphaned_sites.delete()
+            self.stats['deleted_sites'] = count
+            logger.info(f"Deleted {count} orphaned site(s)")
+        
+        # Clean up devices
+        all_meraki_devices = Device.objects.filter(tags=meraki_tag)
+        orphaned_devices = all_meraki_devices.exclude(id__in=self.synced_object_ids['devices'])
+        if orphaned_devices.exists():
+            count = orphaned_devices.count()
+            for device in orphaned_devices:
+                logger.info(f"Deleting orphaned device: {device.name} (Serial: {device.serial}, ID: {device.id})")
+            orphaned_devices.delete()
+            self.stats['deleted_devices'] = count
+            logger.info(f"Deleted {count} orphaned device(s)")
+        
+        # Clean up VLANs
+        all_meraki_vlans = VLAN.objects.filter(tags=meraki_tag)
+        orphaned_vlans = all_meraki_vlans.exclude(id__in=self.synced_object_ids['vlans'])
+        if orphaned_vlans.exists():
+            count = orphaned_vlans.count()
+            for vlan in orphaned_vlans:
+                logger.info(f"Deleting orphaned VLAN: {vlan.name} (VID: {vlan.vid}, ID: {vlan.id})")
+            orphaned_vlans.delete()
+            self.stats['deleted_vlans'] = count
+            logger.info(f"Deleted {count} orphaned VLAN(s)")
+        
+        # Clean up prefixes
+        all_meraki_prefixes = Prefix.objects.filter(tags=meraki_tag)
+        orphaned_prefixes = all_meraki_prefixes.exclude(id__in=self.synced_object_ids['prefixes'])
+        if orphaned_prefixes.exists():
+            count = orphaned_prefixes.count()
+            for prefix in orphaned_prefixes:
+                logger.info(f"Deleting orphaned prefix: {prefix.prefix} (ID: {prefix.id})")
+            orphaned_prefixes.delete()
+            self.stats['deleted_prefixes'] = count
+            logger.info(f"Deleted {count} orphaned prefix(s)")
+        
+        logger.info("Orphaned object cleanup complete")

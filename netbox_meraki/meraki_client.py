@@ -132,3 +132,13 @@ class MerakiAPIClient:
     def get_organization_inventory(self, org_id: str) -> List[Dict]:
         """Get organization inventory devices"""
         return self._request('GET', f'organizations/{org_id}/inventoryDevices')
+    
+    def get_wireless_ssids(self, network_id: str) -> List[Dict]:
+        """Get wireless SSIDs for a network"""
+        try:
+            return self._request('GET', f'networks/{network_id}/wireless/ssids')
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code in [400, 404]:
+                # Network doesn't have wireless or isn't configured
+                return []
+            raise

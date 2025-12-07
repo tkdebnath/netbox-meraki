@@ -1,25 +1,39 @@
 # NetBox Meraki Sync Plugin
 
-A NetBox plugin that synchronizes Cisco Meraki Dashboard data to NetBox. This plugin provides one-way synchronization of networks, devices, VLANs, and prefixes from Meraki to NetBox.
+A NetBox plugin that synchronizes Cisco Meraki Dashboard data to NetBox. This plugin provides intelligent one-way synchronization with automatic cleanup and update capabilities.
 
 ## Features
 
+### Core Synchronization
 - **One-way synchronization** from Meraki Dashboard to NetBox
 - **Organization support**: Sync multiple Meraki organizations
 - **Network sync**: Meraki networks are imported as NetBox Sites
 - **Device sync**: Import Meraki devices with accurate information including:
   - Device model and manufacturer
-  - Serial numbers
-  - Management IP addresses
-  - Device status
-  - Firmware versions
+  - Serial numbers (enforced uniqueness)
+  - Management IP addresses and interfaces
+  - Device status (active/offline)
+  - Firmware versions (custom field)
+  - Wireless SSIDs (for access points)
+  - Switch port configurations with VLANs
 - **VLAN sync**: Import VLANs configured on MX appliances
-- **Prefix sync**: Import subnets/prefixes from Meraki VLANs
-- **Automatic tagging**: All synced objects are tagged with "Meraki" for easy identification
-- **Sync logging**: Track synchronization history and results
+- **Prefix sync**: Import subnets/prefixes with automatic site updates
+
+### Smart Data Management
+- **Orphaned object cleanup**: Automatically removes objects deleted from Meraki
+- **Device serial uniqueness**: Prevents duplicate devices with same serial number
+- **Prefix site updates**: Automatically updates prefix sites when networks change
+- **Interface management**: Full switch port sync with VLAN assignments (access/trunk)
+- **Custom fields**: Automatic creation for firmware versions and SSIDs
+
+### Operational Features
+- **Three sync modes**: Auto, Review (with approval), and Dry Run
+- **Automatic tagging**: All synced objects tagged with "Meraki"
+- **Comprehensive logging**: Track all sync operations with detailed statistics
 - **Web UI**: Dashboard for monitoring sync status and triggering syncs
 - **Management command**: CLI command for automation and scheduling
 - **REST API**: Programmatic access to sync logs and trigger syncs
+- **Scheduling**: Built-in scheduler with cron/systemd/continuous service support
 
 ## Requirements
 
@@ -295,6 +309,14 @@ python manage.py test netbox_meraki
 - **Issues**: [GitHub Issues](https://github.com/yourusername/netbox-meraki/issues)
 - **Documentation**: [GitHub Wiki](https://github.com/yourusername/netbox-meraki/wiki)
 
+## Additional Documentation
+
+- **[SCHEDULING_GUIDE.md](SCHEDULING_GUIDE.md)** - Complete guide for setting up automatic scheduled syncs
+- **[SYNC_BEHAVIOR.md](SYNC_BEHAVIOR.md)** - Detailed sync behavior, cleanup rules, and data consistency
+- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - Comprehensive installation and setup guide
+- **[CONFIGURATION_EXAMPLES.md](CONFIGURATION_EXAMPLES.md)** - Configuration examples and recipes
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference for common tasks
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
@@ -305,6 +327,110 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 - Uses [Cisco Meraki Dashboard API](https://developer.cisco.com/meraki/api-latest/)
 
 ## Changelog
+
+### Version 0.6.0 (Latest)
+
+**Live Progress & Monitoring:**
+- Real-time progress tracking with live logs during sync
+- Progress bar showing completion percentage
+- Current operation display showing what's being synced
+- Auto-refreshing sync log view (3-second intervals)
+- Comprehensive progress logging with timestamps and levels (INFO/WARN/ERROR)
+- SSID synchronization tracking in statistics
+
+**Cancel Sync Capability:**
+- Cancel button for ongoing sync operations
+- Graceful cancellation after current operation completes
+- API endpoint for programmatic cancellation
+- Cancellation timestamp tracking
+- Prevents data corruption by completing current operation
+
+**Enhanced Review Mode:**
+- Categorized review items by type (Sites, Devices, VLANs, Prefixes, SSIDs)
+- Detailed preview displays for each item showing all field values
+- Related object information (site, role, manufacturer, etc.)
+- Side-by-side comparison for updates (current vs. new values)
+- Expandable sections for better organization
+- Device type and SSID item types added
+
+**Automatic Device Type Creation:**
+- Automatically creates missing device types during sync
+- Part number field automatically filled with model number
+- Updates existing device types if part number is missing
+- Reduces manual configuration requirements
+- Progress log entry when device types are created
+
+**API Enhancements:**
+- `/api/plugins/netbox-meraki/sync-logs/{id}/progress/` - Get live progress updates
+- `/api/plugins/netbox-meraki/sync-logs/{id}/cancel/` - Cancel ongoing sync
+- Real-time JSON response with all sync statistics
+- SSID count included in progress data
+
+**Migration Required:**
+```bash
+python manage.py migrate netbox_meraki
+```
+
+### Version 0.5.0
+
+**Name Transformation Features:**
+- Configurable name transformations for devices, sites, VLANs, and SSIDs
+- Options: Keep Original, UPPERCASE, lowercase, Title Case
+- Applied during sync for consistent naming conventions
+- Separate control for each object type
+
+**NetBox Job Integration:**
+- Native NetBox background job support
+- `MerakiSyncJob` - Manual sync via Jobs UI
+- `ScheduledMerakiSyncJob` - Scheduled sync with status tracking
+- View job status, logs, and history in NetBox UI
+- Schedule jobs using NetBox's built-in scheduler
+- Better visibility and monitoring
+
+**UI Enhancements:**
+- New "Name Transformations" configuration tab
+- Examples for each transformation type
+- Quick access to Scheduled Jobs from dashboard
+- Improved configuration organization
+
+**Migration Required:**
+```bash
+python manage.py migrate netbox_meraki
+```
+
+See configuration tab for name transformation settings.
+
+### Version 0.4.0
+
+**Scheduling Features:**
+- Built-in scheduling system with configurable intervals
+- Multiple deployment options: systemd service, systemd timer, cron jobs
+- Continuous background service mode with auto-restart
+- Configurable sync modes for scheduled runs (auto/review/dry_run)
+- Automatic next-sync-time calculation and tracking
+- Web UI for scheduling configuration
+- `schedule_meraki_sync` management command
+- Systemd and cron deployment templates included
+
+See [SCHEDULING_GUIDE.md](SCHEDULING_GUIDE.md) for setup instructions.
+
+### Version 0.3.0
+
+**Smart Data Management:**
+- Automatic orphaned object cleanup (sites, devices, VLANs, prefixes)
+- Device serial number uniqueness enforcement (prevents duplicates)
+- Automatic prefix site updates when network changes
+- Comprehensive interface syncing with VLANs (access/trunk modes)
+- Switch port configuration sync with VLAN assignments
+
+**Enhanced Features:**
+- Custom fields for firmware versions and SSIDs
+- Wireless AP SSID tracking
+- IP address management on interfaces
+- Detailed cleanup and update statistics
+- Enhanced logging for all operations
+
+See [SYNC_BEHAVIOR.md](SYNC_BEHAVIOR.md) for detailed documentation on new features.
 
 ### Version 0.2.0
 

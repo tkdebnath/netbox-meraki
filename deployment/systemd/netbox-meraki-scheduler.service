@@ -1,0 +1,19 @@
+[Unit]
+Description=NetBox Meraki Sync Scheduler
+After=network.target netbox.service
+Requires=netbox.service
+
+[Service]
+Type=simple
+User=netbox
+Group=netbox
+WorkingDirectory=/opt/netbox/netbox
+Environment="PYTHON=/opt/netbox/venv/bin/python"
+ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py schedule_meraki_sync --continuous --interval 60
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

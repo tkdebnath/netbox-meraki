@@ -4,8 +4,8 @@ from netbox.plugins import PluginConfig
 class MerakiConfig(PluginConfig):
     name = 'netbox_meraki'
     verbose_name = 'NetBox Meraki Sync'
-    description = 'Synchronize Meraki networks, devices, VLANs, and prefixes to NetBox'
-    version = '0.2.0'
+    description = 'Synchronize Meraki networks, devices, VLANs, and prefixes to NetBox with smart cleanup'
+    version = '0.6.0'
     author = 'NetBox Meraki Team'
     author_email = 'support@example.com'
     base_url = 'meraki'

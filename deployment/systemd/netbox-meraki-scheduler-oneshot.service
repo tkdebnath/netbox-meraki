@@ -1,0 +1,14 @@
+[Unit]
+Description=NetBox Meraki Sync One-Shot
+After=network.target netbox.service
+Requires=netbox.service
+
+[Service]
+Type=oneshot
+User=netbox
+Group=netbox
+WorkingDirectory=/opt/netbox/netbox
+Environment="PYTHON=/opt/netbox/venv/bin/python"
+ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py schedule_meraki_sync
+StandardOutput=journal
+StandardError=journal

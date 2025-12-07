@@ -1,165 +1,201 @@
-# Quick Installation Reference Card
+# Quick Reference: Version 0.6.0 Features
 
-## One-Page Installation Guide
+## Live Progress Tracking
 
-### 1️⃣ Install Plugin
+### View Progress
+1. Dashboard → "Run Sync Now"
+2. Auto-redirected to sync log page
+3. Watch progress bar advance
+4. See live log entries appear
+5. Monitor object counts
+
+### Controls
+- **Pause Auto-Refresh**: Stop updates temporarily
+- **Resume Auto-Refresh**: Continue live updates
+- **Refresh Interval**: Every 3 seconds
+
+### Log Levels
+- 🔵 **INFO**: Normal progress
+- 🟡 **WARN**: Non-critical issues
+- 🔴 **ERROR**: Failures
+
+## Sync Cancellation
+
+### Cancel via UI
+1. Go to running sync log page
+2. Click "Cancel Sync" (yellow button)
+3. Confirm dialog
+4. Wait for current operation to complete
+
+### Cancel via API
 ```bash
-cd /opt/netbox && source venv/bin/activate
-cd /path/to/netbox-meraki && pip install -e .
+curl -X POST \
+  http://netbox/api/plugins/netbox-meraki/sync-logs/{id}/cancel/ \
+  -H "Authorization: Token YOUR_TOKEN"
 ```
 
-### 2️⃣ Add to .env File
-```bash
-echo "MERAKI_API_KEY=your-api-key-here" >> /opt/netbox/netbox/netbox/.env
-```
+### What Happens
+- Current operation completes
+- No new operations started
+- Status set to "failed"
+- Message: "Sync cancelled by user"
 
-### 3️⃣ Update configuration.py
+## Enhanced Review Mode
+
+### Object Categories
+1. **Sites** (Blue) - Networks as sites
+2. **Devices** (Green) - Full device details
+3. **VLANs** (Yellow) - VLAN configurations
+4. **Prefixes** (Cyan) - IP subnets
+5. **SSIDs** (Gray) - Wireless networks
+
+### Actions
+- **Individual**: Approve/Reject per item
+- **Bulk**: Approve All / Reject All
+- **Apply**: Execute approved changes
+
+### Preview Details
+Each item shows:
+- All field values
+- Related objects (badges)
+- Current vs. new (for updates)
+- Action type (CREATE/UPDATE/SKIP)
+
+## Auto Device Type Creation
+
+### Automatic
+- Missing types created during sync
+- Part number = model number
+- No manual setup required
+
+### Manual Override
+1. Device Types → Find type
+2. Edit part number
+3. Save (won't be overridden)
+
+## SSID Tracking
+
+### Storage
+- Custom field: `meraki_ssids`
+- Example: "Employee-WiFi, Guest-WiFi, IoT"
+- Only on wireless APs (MR devices)
+
+### Statistics
+- SSID counter in sync log
+- Included in progress updates
+- API responses include count
+
+## API Quick Reference
+
+### Get Progress
+```bash
+GET /api/plugins/netbox-meraki/sync-logs/{id}/progress/
+```
+Returns: status, progress_percent, current_operation, logs, counters
+
+### Cancel Sync
+```bash
+POST /api/plugins/netbox-meraki/sync-logs/{id}/cancel/
+```
+Returns: message, cancelled_at
+
+### Trigger Sync
+```bash
+POST /api/plugins/netbox-meraki/sync-logs/trigger_sync/
+```
+Returns: sync log object with ID
+
+## Monitoring Script Example
+
 ```python
-import os
+import requests
+import time
 
-PLUGINS = ['netbox_meraki']
+NETBOX = "http://netbox"
+TOKEN = "your_token"
+headers = {"Authorization": f"Token {TOKEN}"}
 
-PLUGINS_CONFIG = {
-    'netbox_meraki': {
-        'meraki_api_key': os.environ.get('MERAKI_API_KEY', ''),
-        'meraki_base_url': 'https://api.meraki.com/api/v1',
-        'auto_create_sites': True,
-        'auto_create_device_types': True,
-        'auto_create_device_roles': True,
-        'default_device_role': 'Network Device',
-    }
-}
+# Start sync
+r = requests.post(f"{NETBOX}/api/plugins/netbox-meraki/sync-logs/trigger_sync/", 
+                  headers=headers)
+sync_id = r.json()['id']
+
+# Monitor
+while True:
+    r = requests.get(f"{NETBOX}/api/plugins/netbox-meraki/sync-logs/{sync_id}/progress/", 
+                     headers=headers)
+    data = r.json()
+    
+    print(f"{data['progress_percent']}% - {data['current_operation']}")
+    
+    if data['status'] != 'running':
+        print(f"Done: {data['status']}")
+        break
+    
+    time.sleep(3)
 ```
 
-### 4️⃣ Run Migrations
+## Migration
+
 ```bash
-cd /opt/netbox/netbox
+# Update code
+git pull
+
+# Run migration
 python manage.py migrate netbox_meraki
-python manage.py collectstatic --no-input
-```
-
-### 5️⃣ Restart Services
-```bash
-sudo systemctl restart netbox netbox-rq
-```
-
-### 6️⃣ Test Installation
-```bash
-cd /opt/netbox/netbox
-python manage.py sync_meraki --mode dry_run
-```
-
----
-
-## Usage Quick Reference
-
-### Web Interface
-1. Navigate to **Plugins > Meraki Sync**
-2. Click **Sync Now**
-3. Select mode: **Auto**, **Review**, or **Dry Run**
-4. Click **Start Synchronization**
-
-### CLI Commands
-```bash
-# Dry run (preview only)
-python manage.py sync_meraki --mode dry_run
-
-# Review mode (stage for approval)
-python manage.py sync_meraki --mode review
-
-# Auto mode (immediate sync)
-python manage.py sync_meraki --mode auto
-```
-
-### Sync Modes
-- **Auto**: Immediate - changes applied instantly
-- **Review**: Staged - approve/reject before applying
-- **Dry Run**: Preview - no changes made
-
----
-
-## Configuration Locations
-
-| File | Purpose |
-|------|---------|
-| `/opt/netbox/netbox/netbox/.env` | Environment variables (API key) |
-| `/opt/netbox/netbox/netbox/configuration.py` | Plugin configuration |
-
----
-
-## Common Commands
-
-```bash
-# Activate venv
-cd /opt/netbox && source venv/bin/activate
-
-# Check migrations
-python manage.py showmigrations netbox_meraki
-
-# View sync logs
-tail -f /opt/netbox/netbox/netbox.log
 
 # Restart services
 sudo systemctl restart netbox netbox-rq
+
+# Verify
+python manage.py showmigrations netbox_meraki
 ```
-
----
-
-## Getting Meraki API Key
-
-1. Login to Meraki Dashboard
-2. **Organization > Settings > Dashboard API access**
-3. Enable API access
-4. **Generate new API key**
-5. Copy and save securely
-
----
-
-## File Permissions (Security)
-
-```bash
-chmod 600 /opt/netbox/netbox/netbox/configuration.py
-chmod 600 /opt/netbox/netbox/netbox/.env
-```
-
----
 
 ## Troubleshooting
 
-❌ **Plugin not visible**
-- Check `PLUGINS` list in configuration.py
-- Restart NetBox services
-- Check logs: `tail -f /opt/netbox/netbox/netbox.log`
+### Progress Not Updating
+- Check browser console for errors
+- Verify API endpoint accessible
+- Clear browser cache
+- Try different browser
 
-❌ **API authentication fails**
-- Verify API key in .env file
-- Test: `curl -H "X-Cisco-Meraki-API-Key: KEY" https://api.meraki.com/api/v1/organizations`
+### Cancel Not Working
+- Wait for current operation (30-60s)
+- Verify sync status is "running"
+- Check NetBox logs for errors
 
-❌ **Migrations fail**
-- Run: `python manage.py migrate netbox_meraki`
-- Check database connectivity
+### Missing Device Types
+- Check "Auto-created device type" in logs
+- Verify "Cisco Meraki" manufacturer exists
+- Check model name is valid
+
+### No SSID Data
+- Ensure device is MR (wireless AP)
+- Verify SSIDs enabled in Meraki
+- Check custom field exists
+
+## Best Practices
+
+✅ **Use Review Mode First** - See what will change  
+✅ **Monitor Progress** - Watch for errors  
+✅ **Cancel if Needed** - Don't let bad syncs run  
+✅ **Verify Device Types** - Check auto-created types  
+✅ **Clean Old Logs** - Remove old sync logs periodically  
+
+## Support Resources
+
+- **Full Guide**: ENHANCED_FEATURES.md
+- **Implementation**: VERSION_0.6.0_SUMMARY.md
+- **Changelog**: README.md
+- **NetBox Logs**: `/var/log/netbox/`
+
+## Version Info
+
+**Current**: 0.6.0  
+**Released**: December 2025  
+**NetBox**: 4.4.x or higher  
+**Python**: 3.10 or higher  
 
 ---
 
-## URLs
-
-- Dashboard: `/plugins/meraki/`
-- Configuration: `/plugins/meraki/config/`
-- Reviews: `/plugins/meraki/reviews/`
-- API: `/api/plugins/meraki/`
-
----
-
-## Support Files
-
-- `INSTALLATION_GUIDE.md` - Full installation instructions
-- `CONFIGURATION_EXAMPLES.md` - Configuration snippets
-- `QUICKSTART.md` - Quick start guide
-- `EXAMPLES.md` - Usage examples
-- `README.md` - Complete documentation
-
----
-
-**Version:** 0.2.0  
-**NetBox:** 4.4.x  
-**Python:** 3.10+
+**Quick Tip**: Start with dry run mode to see what would happen without making changes!

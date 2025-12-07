@@ -225,22 +225,29 @@ class ReviewDetailView(LoginRequiredMixin, View):
         review = get_object_or_404(SyncReview, pk=pk)
         items = review.items.all()
         
-        # Group items by type and action
-        items_by_type = {}
-        for item in items:
-            key = f"{item.item_type}_{item.action_type}"
-            if key not in items_by_type:
-                items_by_type[key] = []
-            items_by_type[key].append(item)
+        # Group items by type
+        site_items = items.filter(item_type='site')
+        device_items = items.filter(item_type='device')
+        device_type_items = items.filter(item_type='device_type')
+        vlan_items = items.filter(item_type='vlan')
+        prefix_items = items.filter(item_type='prefix')
+        interface_items = items.filter(item_type='interface')
+        ssid_items = items.filter(item_type='ssid')
         
         context = {
             'review': review,
             'items': items,
-            'items_by_type': items_by_type,
+            'site_items': site_items,
+            'device_items': device_items,
+            'device_type_items': device_type_items,
+            'vlan_items': vlan_items,
+            'prefix_items': prefix_items,
+            'interface_items': interface_items,
+            'ssid_items': ssid_items,
             'sync_log': review.sync_log,
         }
         
-        return render(request, 'netbox_meraki/review_detail.html', context)
+        return render(request, 'netbox_meraki/review_detail_new.html', context)
     
     def post(self, request, pk):
         review = get_object_or_404(SyncReview, pk=pk)
@@ -314,6 +321,77 @@ class ReviewItemActionView(LoginRequiredMixin, View):
             
             messages.info(request, f'Rejected: {item.object_name}')
         
+        return redirect('plugins:netbox_meraki:review_detail', pk=pk)
+
+
+class ReviewItemEditView(LoginRequiredMixin, View):
+    """Edit review item data before applying"""
+    
+    def get(self, request, pk, item_pk):
+        review = get_object_or_404(SyncReview, pk=pk)
+        item = get_object_or_404(ReviewItem, pk=item_pk, review=review)
+        
+        # Use editable_data if exists, otherwise proposed_data
+        data_to_edit = item.editable_data if item.editable_data else item.proposed_data.copy()
+        
+        context = {
+            'review': review,
+            'item': item,
+            'data_to_edit': data_to_edit,
+        }
+        
+        return render(request, 'netbox_meraki/review_item_edit.html', context)
+    
+    def post(self, request, pk, item_pk):
+        review = get_object_or_404(SyncReview, pk=pk)
+        item = get_object_or_404(ReviewItem, pk=item_pk, review=review)
+        
+        # Build editable_data from form
+        editable_data = {}
+        
+        # Common fields based on item type
+        if item.item_type == 'site':
+            editable_data = {
+                'name': request.POST.get('name', ''),
+                'slug': request.POST.get('slug', ''),
+                'description': request.POST.get('description', ''),
+            }
+        elif item.item_type == 'device':
+            editable_data = {
+                'name': request.POST.get('name', ''),
+                'serial': request.POST.get('serial', ''),
+                'model': request.POST.get('model', ''),
+                'manufacturer': request.POST.get('manufacturer', ''),
+                'role': request.POST.get('role', ''),
+                'site': request.POST.get('site', ''),
+                'status': request.POST.get('status', ''),
+            }
+            # Keep other fields from proposed_data
+            for key in item.proposed_data:
+                if key not in editable_data:
+                    editable_data[key] = item.proposed_data[key]
+        elif item.item_type == 'vlan':
+            editable_data = {
+                'name': request.POST.get('name', ''),
+                'vid': request.POST.get('vid', ''),
+                'description': request.POST.get('description', ''),
+            }
+            # Keep other fields
+            for key in item.proposed_data:
+                if key not in editable_data:
+                    editable_data[key] = item.proposed_data[key]
+        else:
+            # For other types, keep proposed_data and update specific fields
+            editable_data = item.proposed_data.copy()
+            editable_data['name'] = request.POST.get('name', editable_data.get('name', ''))
+            if 'description' in editable_data:
+                editable_data['description'] = request.POST.get('description', editable_data.get('description', ''))
+        
+        # Save editable data
+        item.editable_data = editable_data
+        item.save()
+        
+        messages.success(request, f'Updated {item.item_type}: {item.object_name}')
         return redirect('plugins:netbox_meraki:review_detail', pk=pk)
 
 

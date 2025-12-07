@@ -1,0 +1,173 @@
+{% extends 'base/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Edit {{ item.item_type|title }}: {{ item.object_name }}</h1>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:dashboard' %}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:review_list' %}">Reviews</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'plugins:netbox_meraki:review_detail' review.pk %}">Review #{{ review.pk }}</a></li>
+                <li class="breadcrumb-item active">Edit Item</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <strong>Edit {{ item.action_type|title }} {{ item.item_type|title }}</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if item.item_type == 'site' %}
+                    <div class="mb-3">
+                        <label for="name" class="form-label"><strong>Site Name *</strong></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ data_to_edit.name }}" required>
+                        <div class="form-text">Name of the site in NetBox</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="slug" class="form-label"><strong>Slug</strong></label>
+                        <input type="text" class="form-control" id="slug" name="slug" 
+                               value="{{ data_to_edit.slug|default:'' }}">
+                        <div class="form-text">URL-friendly identifier (auto-generated if empty)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label"><strong>Description</strong></label>
+                        <textarea class="form-control" id="description" name="description" rows="2">{{ data_to_edit.description|default:'' }}</textarea>
+                        <div class="form-text">Brief description of the site</div>
+                    </div>
+                    
+                    {% elif item.item_type == 'device' %}
+                    <div class="mb-3">
+                        <label for="name" class="form-label"><strong>Device Name *</strong></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ data_to_edit.name }}" required>
+                        <div class="form-text">Name of the device in NetBox</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="serial" class="form-label"><strong>Serial Number</strong></label>
+                        <input type="text" class="form-control" id="serial" name="serial" 
+                               value="{{ data_to_edit.serial|default:'' }}" readonly>
+                        <div class="form-text">Serial number (cannot be changed)</div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="model" class="form-label"><strong>Model</strong></label>
+                            <input type="text" class="form-control" id="model" name="model" 
+                                   value="{{ data_to_edit.model|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="manufacturer" class="form-label"><strong>Manufacturer</strong></label>
+                            <input type="text" class="form-control" id="manufacturer" name="manufacturer" 
+                                   value="{{ data_to_edit.manufacturer|default:'Cisco Meraki' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="role" class="form-label"><strong>Device Role</strong></label>
+                            <input type="text" class="form-control" id="role" name="role" 
+                                   value="{{ data_to_edit.role|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="site" class="form-label"><strong>Site</strong></label>
+                            <input type="text" class="form-control" id="site" name="site" 
+                                   value="{{ data_to_edit.site|default:'' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="status" class="form-label"><strong>Status</strong></label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="active" {% if data_to_edit.status == 'active' %}selected{% endif %}>Active</option>
+                            <option value="offline" {% if data_to_edit.status == 'offline' %}selected{% endif %}>Offline</option>
+                            <option value="planned" {% if data_to_edit.status == 'planned' %}selected{% endif %}>Planned</option>
+                            <option value="staged" {% if data_to_edit.status == 'staged' %}selected{% endif %}>Staged</option>
+                            <option value="failed" {% if data_to_edit.status == 'failed' %}selected{% endif %}>Failed</option>
+                            <option value="inventory" {% if data_to_edit.status == 'inventory' %}selected{% endif %}>Inventory</option>
+                        </select>
+                    </div>
+                    
+                    {% elif item.item_type == 'vlan' %}
+                    <div class="mb-3">
+                        <label for="name" class="form-label"><strong>VLAN Name *</strong></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ data_to_edit.name }}" required>
+                        <div class="form-text">Name of the VLAN</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="vid" class="form-label"><strong>VLAN ID *</strong></label>
+                        <input type="number" class="form-control" id="vid" name="vid" 
+                               value="{{ data_to_edit.vid }}" min="1" max="4094" required>
+                        <div class="form-text">VLAN ID (1-4094)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label"><strong>Description</strong></label>
+                        <textarea class="form-control" id="description" name="description" rows="2">{{ data_to_edit.description|default:'' }}</textarea>
+                        <div class="form-text">Brief description of the VLAN</div>
+                    </div>
+                    
+                    {% else %}
+                    <div class="mb-3">
+                        <label for="name" class="form-label"><strong>Name *</strong></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ data_to_edit.name }}" required>
+                        <div class="form-text">Name of the {{ item.item_type }}</div>
+                    </div>
+                    
+                    {% if data_to_edit.description is not None %}
+                    <div class="mb-3">
+                        <label for="description" class="form-label"><strong>Description</strong></label>
+                        <textarea class="form-control" id="description" name="description" rows="2">{{ data_to_edit.description|default:'' }}</textarea>
+                        <div class="form-text">Brief description</div>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    
+                    <hr>
+                    
+                    <div class="alert alert-info">
+                        <strong>Note:</strong> Changes will be saved to this review item and applied when you approve and execute the sync.
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'plugins:netbox_meraki:review_detail' review.pk %}" class="btn btn-secondary">
+                            <i class="mdi mdi-arrow-left"></i> Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="mdi mdi-content-save"></i> Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <strong>Original Data from Meraki</strong>
+            </div>
+            <div class="card-body">
+                <pre class="bg-light p-3 rounded">{{ item.proposed_data|pprint }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -68,12 +68,89 @@ class PluginSettings(models.Model):
         help_text='Default synchronization mode: Auto (immediate), Review (requires approval), or Dry Run (preview only)'
     )
     
+    # Scheduling Settings
+    enable_scheduled_sync = models.BooleanField(
+        default=False,
+        verbose_name='Enable Scheduled Sync',
+        help_text='Enable automatic scheduled synchronization'
+    )
+    sync_interval_minutes = models.IntegerField(
+        default=60,
+        verbose_name='Sync Interval (minutes)',
+        help_text='Interval between automatic syncs in minutes (minimum 5)'
+    )
+    scheduled_sync_mode = models.CharField(
+        max_length=20,
+        default='auto',
+        choices=[
+            ('auto', 'Auto Sync'),
+            ('review', 'Sync with Review'),
+            ('dry_run', 'Dry Run'),
+        ],
+        verbose_name='Scheduled Sync Mode',
+        help_text='Mode to use for scheduled synchronization'
+    )
+    last_scheduled_sync = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Last Scheduled Sync',
+        help_text='Timestamp of last scheduled sync execution'
+    )
+    next_scheduled_sync = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Next Scheduled Sync',
+        help_text='Timestamp of next scheduled sync'
+    )
+    
     class Meta:
         verbose_name = 'Plugin Settings'
         verbose_name_plural = 'Plugin Settings'
     
     def __str__(self):
         return "Meraki Plugin Settings"
+    
+    def clean(self):
+        """Validate settings"""
+        if self.sync_interval_minutes and self.sync_interval_minutes < 5:
+            raise ValidationError('Sync interval must be at least 5 minutes')
+    
+    def update_next_sync_time(self):
+        """Calculate and update next scheduled sync time"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if self.enable_scheduled_sync:
+            now = timezone.now()
+            self.last_scheduled_sync = now
+            self.next_scheduled_sync = now + timedelta(minutes=self.sync_interval_minutes)
+            self.save()
+    
+    def should_run_scheduled_sync(self):
+        """Check if scheduled sync should run now"""
+        from django.utils import timezone
+        
+        if not self.enable_scheduled_sync:
+            return False
+        
+        if self.next_scheduled_sync is None:
+            return True
+        
+        return timezone.now() >= self.next_scheduled_sync
+    
+    def transform_name(self, name: str, transform_type: str) -> str:
+        """Apply name transformation based on setting"""
+        if not name:
+            return name
+        
+        if transform_type == 'upper':
+            return name.upper()
+        elif transform_type == 'lower':
+            return name.lower()
+        elif transform_type == 'title':
+            return name.title()
+        else:  # 'keep'
+            return name
     
     @classmethod
     def get_settings(cls):
@@ -205,8 +282,23 @@ class SyncLog(models.Model):
     devices_synced = models.IntegerField(default=0)
     vlans_synced = models.IntegerField(default=0)
     prefixes_synced = models.IntegerField(default=0)
+    ssids_synced = models.IntegerField(default=0)
+    deleted_sites = models.IntegerField(default=0)
+    deleted_devices = models.IntegerField(default=0)
+    deleted_vlans = models.IntegerField(default=0)
+    deleted_prefixes = models.IntegerField(default=0)
+    updated_prefixes = models.IntegerField(default=0)
     errors = models.JSONField(default=list, blank=True)
     duration_seconds = models.FloatField(null=True, blank=True)
+    
+    # Progress tracking
+    progress_logs = models.JSONField(default=list, blank=True, help_text='Live progress log entries')
+    current_operation = models.CharField(max_length=255, blank=True, help_text='Current sync operation')
+    progress_percent = models.IntegerField(default=0, help_text='Overall progress percentage')
+    
+    # Cancel capability
+    cancel_requested = models.BooleanField(default=False, help_text='Flag to cancel ongoing sync')
+    cancelled_at = models.DateTimeField(null=True, blank=True, help_text='When sync was cancelled')
     sync_mode = models.CharField(
         max_length=20,
         default='auto',
@@ -227,6 +319,37 @@ class SyncLog(models.Model):
     
     def get_absolute_url(self):
         return reverse('plugins:netbox_meraki:synclog', args=[self.pk])
+    
+    def add_progress_log(self, message: str, level: str = 'info'):
+        """Add a progress log entry with timestamp"""
+        from django.utils import timezone
+        entry = {
+            'timestamp': timezone.now().isoformat(),
+            'level': level,
+            'message': message
+        }
+        if not self.progress_logs:
+            self.progress_logs = []
+        self.progress_logs.append(entry)
+        self.save(update_fields=['progress_logs'])
+    
+    def update_progress(self, operation: str, percent: int):
+        """Update current operation and progress percentage"""
+        self.current_operation = operation
+        self.progress_percent = min(100, max(0, percent))
+        self.save(update_fields=['current_operation', 'progress_percent'])
+    
+    def request_cancel(self):
+        """Request cancellation of this sync"""
+        from django.utils import timezone
+        self.cancel_requested = True
+        self.cancelled_at = timezone.now()
+        self.save(update_fields=['cancel_requested', 'cancelled_at'])
+    
+    def check_cancel_requested(self) -> bool:
+        """Check if cancellation has been requested"""
+        self.refresh_from_db(fields=['cancel_requested'])
+        return self.cancel_requested
 
 
 class SyncReview(models.Model):
@@ -293,10 +416,12 @@ class ReviewItem(models.Model):
     ITEM_TYPES = [
         ('site', 'Site'),
         ('device', 'Device'),
+        ('device_type', 'Device Type'),
         ('vlan', 'VLAN'),
         ('prefix', 'Prefix'),
         ('interface', 'Interface'),
         ('ip_address', 'IP Address'),
+        ('ssid', 'SSID'),
     ]
     
     ACTION_TYPES = [
@@ -325,6 +450,20 @@ class ReviewItem(models.Model):
     proposed_data = models.JSONField(
         help_text='Data to be synced from Meraki'
     )
+    editable_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='User-edited data to apply (overrides proposed_data if set)'
+    )
+    preview_display = models.TextField(
+        blank=True,
+        help_text='Human-readable preview of what will be created/updated'
+    )
+    related_object_info = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Information about related objects (site, device role, etc.)'
+    )
     status = models.CharField(
         max_length=20,
         choices=[
@@ -346,6 +485,10 @@ class ReviewItem(models.Model):
     
     def __str__(self):
         return f"{self.action_type} {self.item_type}: {self.object_name}"
+    
+    def get_final_data(self):
+        """Get the final data to apply (editable_data if set, otherwise proposed_data)"""
+        return self.editable_data if self.editable_data else self.proposed_data
     
     def get_changes(self):
         """Get dictionary of changes between current and proposed data"""
