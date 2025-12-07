@@ -1350,31 +1350,38 @@ class MerakiSyncService:
                     # Update existing prefix
                     existing_prefix.status = 'active'
                     existing_prefix.description = data.get('description', '')
-                    # Use set() for the site relationship in NetBox 4.x
-                    if hasattr(existing_prefix, 'sites'):
-                        # ManyToMany relationship (NetBox 4.x)
-                        existing_prefix.sites.set([site])
+                    # NetBox 4.x uses scope_id and scope_type for site relationship
+                    if hasattr(existing_prefix, 'scope_id'):
+                        # NetBox 4.x approach
+                        site_content_type = ContentType.objects.get_for_model(site)
+                        existing_prefix.scope_type = site_content_type
+                        existing_prefix.scope_id = site.id
                     else:
-                        # ForeignKey relationship (older NetBox)
+                        # Older NetBox with direct site ForeignKey
                         existing_prefix.site = site
                     existing_prefix.save()
                     prefix = existing_prefix
                     created = False
                 else:
-                    # Create new prefix
-                    prefix = Prefix.objects.create(
-                        prefix=data['prefix'],
-                        status='active',
-                        description=data.get('description', ''),
-                    )
-                    # Use set() for the site relationship in NetBox 4.x
-                    if hasattr(prefix, 'sites'):
-                        # ManyToMany relationship (NetBox 4.x)
-                        prefix.sites.set([site])
+                    # Create new prefix with site relationship
+                    if hasattr(Prefix, 'scope_id'):
+                        # NetBox 4.x approach
+                        site_content_type = ContentType.objects.get_for_model(site)
+                        prefix = Prefix.objects.create(
+                            prefix=data['prefix'],
+                            status='active',
+                            description=data.get('description', ''),
+                            scope_type=site_content_type,
+                            scope_id=site.id
+                        )
                     else:
-                        # ForeignKey relationship (older NetBox)
-                        prefix.site = site
-                        prefix.save()
+                        # Older NetBox with direct site ForeignKey
+                        prefix = Prefix.objects.create(
+                            prefix=data['prefix'],
+                            status='active',
+                            description=data.get('description', ''),
+                            site=site
+                        )
                     created = True
                 
                 logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}")
