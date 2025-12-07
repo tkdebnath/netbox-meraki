@@ -38,11 +38,8 @@
                 </li>
             </ul>
             
-            <!-- Hidden fields for values not displayed in tabs but required by form -->
-            {{ form.sync_mode.as_hidden }}
-            {{ form.sync_interval_minutes.as_hidden }}
-            {{ form.scheduled_sync_mode.as_hidden }}
-            {{ form.enable_scheduled_sync.as_hidden }}
+            <!-- Note: sync_mode, sync_interval_minutes, scheduled_sync_mode, and enable_scheduled_sync 
+                 are handled in the view to preserve their existing values -->
             
             <div class="tab-content mt-3">
                 <!-- Device Role Mappings Tab -->

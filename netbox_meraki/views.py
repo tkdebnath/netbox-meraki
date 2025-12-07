@@ -188,12 +188,22 @@ class ConfigView(LoginRequiredMixin, View):
         # Django forms expect 'false' string or absence for False boolean values
         post_data = request.POST.copy()
         
+        # Add missing fields that aren't in the template but required by form
+        # These fields were removed from the UI but are still in the form definition
+        if 'sync_mode' not in post_data:
+            post_data['sync_mode'] = settings_instance.sync_mode
+        if 'sync_interval_minutes' not in post_data:
+            post_data['sync_interval_minutes'] = settings_instance.sync_interval_minutes
+        if 'scheduled_sync_mode' not in post_data:
+            post_data['scheduled_sync_mode'] = settings_instance.scheduled_sync_mode
+        if 'enable_scheduled_sync' not in post_data:
+            post_data['enable_scheduled_sync'] = settings_instance.enable_scheduled_sync
+        
         # For boolean fields, if not present in POST, it means unchecked
         # We need to ensure they're not in the data so the form treats them as False
         checkbox_fields = [
             'process_unmatched_sites',
             'auto_create_device_roles',
-            'enable_scheduled_sync',
             'enable_api_throttling',
             'enable_multithreading',
         ]
