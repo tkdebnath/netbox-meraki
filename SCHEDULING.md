@@ -39,9 +39,43 @@ Or go directly to: **Plugins > Meraki Sync > Scheduled Sync**
 
 ### 3. Set Up Task Executor
 
-Choose ONE of these methods to run scheduled tasks:
+**🎯 Recommended: Use NetBox's Built-in Job System**
 
-#### Option A: Cron Job (Simplest)
+This is the easiest method - no external setup required!
+
+#### Step-by-Step:
+
+1. **Navigate to Jobs**
+   - Click **Jobs** in the top navigation bar
+   - Or go to: `/core/jobs/`
+
+2. **Find the Scheduler Job**
+   - Look for **"Execute Scheduled Sync Tasks"**
+   - This job checks for and runs due tasks
+
+3. **Schedule the Job**
+   - Click the **Run Job** button next to "Execute Scheduled Sync Tasks"
+   - In the dialog that opens:
+     - Check **"Schedule at"** checkbox
+     - **Interval**: Enter `*/5 * * * *` (runs every 5 minutes)
+     - Or `*/10 * * * *` (every 10 minutes)
+   - Click **Run Job**
+
+4. **Verify It's Working**
+   - Go to **Jobs → Job Results**
+   - You should see "Execute Scheduled Sync Tasks" appear every 5-10 minutes
+   - Click on any result to see which tasks were executed
+   - Look for "✓" marks indicating successful task execution
+
+**That's it!** NetBox will now automatically check for due scheduled tasks every 5-10 minutes and execute them.
+
+### Alternative Methods (Optional)
+
+If you prefer not to use NetBox's job system, you can use these alternatives:
+
+#### Option B: Management Command (Alternative)
+
+##### Cron Job (Simplest)
 
 Add to crontab (`crontab -e`):
 
@@ -51,7 +85,7 @@ Add to crontab (`crontab -e`):
 
 This checks for due tasks every minute.
 
-#### Option B: Systemd Timer (Recommended for Production)
+##### Systemd Timer
 
 1. Create service file: `/etc/systemd/system/netbox-meraki-scheduler.service`
 

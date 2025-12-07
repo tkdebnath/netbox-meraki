@@ -21,9 +21,6 @@
                 <a class="nav-link" data-bs-toggle="tab" href="#tags" role="tab">Tag Configuration</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link" data-bs-toggle="tab" href="#scheduling" role="tab">Scheduling</a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link" data-bs-toggle="tab" href="#api-performance" role="tab">API Performance</a>
             </li>
             <li class="nav-item">
@@ -300,78 +297,6 @@
                             
                             <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary">Save Tag Configuration</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Scheduling Tab -->
-            <div class="tab-pane fade" id="scheduling" role="tabpanel">
-                <div class="card">
-                    <div class="card-header">
-                        <strong>Automatic Sync Scheduling</strong>
-                    </div>
-                    <div class="card-body">
-                        <p class="text-muted">Configure automatic scheduled synchronization from Meraki Dashboard.</p>
-                        
-                        <form method="post">
-                            {% csrf_token %}
-                            
-                            <div class="mb-4">
-                                <div class="form-check form-switch">
-                                    {{ form.enable_scheduled_sync }}
-                                    <label class="form-check-label" for="{{ form.enable_scheduled_sync.id_for_label }}">
-                                        <strong>Enable Scheduled Sync</strong>
-                                    </label>
-                                </div>
-                                <small class="form-text text-muted">{{ form.enable_scheduled_sync.help_text }}</small>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="{{ form.sync_interval_minutes.id_for_label }}" class="form-label">
-                                            <strong>Sync Interval (minutes)</strong>
-                                        </label>
-                                        {{ form.sync_interval_minutes }}
-                                        <small class="form-text text-muted">{{ form.sync_interval_minutes.help_text }}</small>
-                                    </div>
-                                </div>
-                                
-                                <div class="col-md-6">
-                                    <div class="mb-3">
-                                        <label for="{{ form.scheduled_sync_mode.id_for_label }}" class="form-label">
-                                            <strong>Scheduled Sync Mode</strong>
-                                        </label>
-                                        {{ form.scheduled_sync_mode }}
-                                        <small class="form-text text-muted">{{ form.scheduled_sync_mode.help_text }}</small>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {% if settings.last_scheduled_sync %}
-                            <div class="alert alert-info">
-                                <strong>Last Scheduled Sync:</strong> {{ settings.last_scheduled_sync }}<br>
-                                {% if settings.next_scheduled_sync %}
-                                <strong>Next Scheduled Sync:</strong> {{ settings.next_scheduled_sync }}
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                            
-                            <div class="alert alert-warning">
-                                <h6><i class="mdi mdi-information"></i> Setup Required</h6>
-                                <p>After enabling scheduled sync, you need to set up one of the following:</p>
-                                <ul>
-                                    <li><strong>Cron Job:</strong> <code>*/{{ settings.sync_interval_minutes|default:"60" }} * * * * cd /opt/netbox/netbox && /opt/netbox/venv/bin/python manage.py schedule_meraki_sync</code></li>
-                                    <li><strong>Systemd Timer:</strong> Install the provided systemd service files</li>
-                                    <li><strong>Continuous Service:</strong> <code>python manage.py schedule_meraki_sync --continuous</code></li>
-                                </ul>
-                                <p class="mb-0">See deployment documentation for complete setup instructions.</p>
-                            </div>
-                            
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary">Save Scheduling Settings</button>
                             </div>
                         </form>
                     </div>

@@ -317,7 +317,19 @@ The scheduled sync page displays all tasks with:
 
 #### Running Scheduled Tasks
 
-##### Method 1: Cron Job (Recommended)
+##### Method 1: NetBox Jobs (Recommended - Easiest!)
+
+Use NetBox's built-in job scheduling system:
+
+1. Navigate to **Jobs → Jobs** in NetBox
+2. Find **"Execute Scheduled Sync Tasks"** 
+3. Click **Run Job** → Check **Schedule at**
+4. Set interval: `*/5 * * * *` (every 5 minutes)
+5. Click **Run Job**
+
+NetBox will automatically execute due tasks every 5 minutes. View results in **Jobs → Job Results**.
+
+##### Method 2: Cron Job (Alternative)
 
 Add to your crontab:
 
@@ -326,7 +338,7 @@ Add to your crontab:
 * * * * * cd /opt/netbox && /opt/netbox/venv/bin/python manage.py run_scheduled_sync
 ```
 
-##### Method 2: Systemd Timer
+##### Method 3: Systemd Timer
 
 Create `/etc/systemd/system/netbox-meraki-scheduler.service`:
 
@@ -364,7 +376,7 @@ sudo systemctl enable netbox-meraki-scheduler.timer
 sudo systemctl start netbox-meraki-scheduler.timer
 ```
 
-##### Method 3: Continuous Service
+##### Method 4: Continuous Service
 
 Run as a persistent background service:
 
