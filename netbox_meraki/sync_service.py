@@ -12,6 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from dcim.models import Site, Device, DeviceType, DeviceRole, Manufacturer, Interface
 from ipam.models import VLAN, VLANGroup, Prefix, IPAddress
+from wireless.models import WirelessLAN, WirelessLANGroup
 from extras.models import Tag, CustomField
 
 from .meraki_client import MerakiAPIClient
@@ -74,23 +75,6 @@ class MerakiSyncService:
             logger.info("Created custom field: meraki_firmware")
         elif device_ct not in firmware_field.object_types.all():
             firmware_field.object_types.add(device_ct)
-        
-        # Create SSID custom field for wireless APs
-        ssid_field, created = CustomField.objects.get_or_create(
-            name='meraki_ssids',
-            defaults={
-                'label': 'Meraki SSIDs',
-                'type': 'text',
-                'description': 'SSIDs broadcast by this access point',
-                'weight': 101,
-            }
-        )
-        if created:
-            # NetBox 4.x uses object_types instead of content_types
-            ssid_field.object_types.set([device_ct])
-            logger.info("Created custom field: meraki_ssids")
-        elif device_ct not in ssid_field.object_types.all():
-            ssid_field.object_types.add(device_ct)
         
         # Create MAC address custom field
         mac_field, created = CustomField.objects.get_or_create(
@@ -671,7 +655,7 @@ class MerakiSyncService:
         return
     
     def _sync_device_ssids(self, device: Device, meraki_device: Dict):
-        """Fetch and store SSIDs for wireless access points"""
+        """Create Wireless LAN objects for SSIDs on wireless access points"""
         try:
             # Get the network ID from device
             network_id = meraki_device.get('networkId')
@@ -681,25 +665,72 @@ class MerakiSyncService:
             # Get plugin settings for transformations
             plugin_settings = PluginSettings.get_settings()
             
+            # Get or create Wireless LAN Group for this site
+            site = device.site
+            wlan_group, _ = WirelessLANGroup.objects.get_or_create(
+                name=f"{site.name} Wireless",
+                defaults={
+                    'slug': f"{site.slug}-wireless",
+                    'description': f'Wireless LANs for {site.name}'
+                }
+            )
+            
             # Fetch SSIDs for this network
             try:
                 ssids = self.client.get_wireless_ssids(network_id)
                 if ssids:
-                    # Filter enabled SSIDs and get their names
-                    enabled_ssids = [
-                        plugin_settings.transform_name(
-                            ssid.get('name', f"SSID {ssid.get('number', '')}"),
+                    for ssid_data in ssids:
+                        if not ssid_data.get('enabled', False):
+                            continue
+                        
+                        ssid_name = ssid_data.get('name', f"SSID {ssid_data.get('number', '')}")
+                        ssid_number = ssid_data.get('number')
+                        auth_mode = ssid_data.get('authMode', 'open')
+                        encryption = ssid_data.get('encryptionMode', 'open')
+                        
+                        # Apply SSID name transformation
+                        ssid_name = plugin_settings.transform_name(
+                            ssid_name,
                             plugin_settings.ssid_name_transform
                         )
-                        for ssid in ssids
-                        if ssid.get('enabled', False)
-                    ]
-                    if enabled_ssids:
-                        ssid_list = ', '.join(enabled_ssids)
-                        device.custom_field_data['meraki_ssids'] = ssid_list
-                        device.save()
-                        self.stats['ssids'] += len(enabled_ssids)
-                        logger.info(f"✓ Added {len(enabled_ssids)} SSIDs to AP {device.name}: {ssid_list}")
+                        
+                        # Generate slug from SSID name
+                        import re
+                        ssid_slug = re.sub(r'[^a-z0-9-]+', '-', ssid_name.lower()).strip('-')
+                        if not ssid_slug:
+                            ssid_slug = f"ssid-{ssid_number}"
+                        
+                        # Create or update Wireless LAN
+                        wlan, created = WirelessLAN.objects.update_or_create(
+                            ssid=ssid_name,
+                            group=wlan_group,
+                            defaults={
+                                'description': f"Meraki SSID #{ssid_number} - Auth: {auth_mode}, Encryption: {encryption}",
+                                'status': 'active',
+                            }
+                        )
+                        
+                        # Associate the wireless LAN with this interface
+                        # Find or create a wireless interface on the AP
+                        wireless_interface, _ = Interface.objects.get_or_create(
+                            device=device,
+                            name='radio0',
+                            defaults={
+                                'type': 'ieee802.11ax',
+                                'description': 'Wireless radio interface',
+                                'enabled': True,
+                            }
+                        )
+                        
+                        # Set the wireless LAN on the interface
+                        if wireless_interface.wireless_lans.filter(id=wlan.id).exists():
+                            logger.debug(f"SSID '{ssid_name}' already associated with {device.name}")
+                        else:
+                            wireless_interface.wireless_lans.add(wlan)
+                            logger.info(f"✓ Added Wireless LAN '{ssid_name}' to AP {device.name}")
+                        
+                        self.stats['ssids'] += 1
+                        
             except Exception as e:
                 logger.debug(f"Could not fetch SSIDs for AP {device.name}: {e}")
         except Exception as e:
