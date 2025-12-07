@@ -298,6 +298,7 @@ class PluginSettings(models.Model):
     def get_device_role_for_product(self, product_type: str) -> str:
         """Get device role name for a Meraki product type"""
         if not product_type:
+            logger.debug(f"No product_type provided, returning default: {self.default_device_role}")
             return self.default_device_role
         
         product_prefix = product_type[:2].upper() if len(product_type) >= 2 else ''
@@ -311,7 +312,10 @@ class PluginSettings(models.Model):
             'MT': self.mt_device_role,
         }
         
-        return role_mapping.get(product_prefix, self.default_device_role)
+        mapped_role = role_mapping.get(product_prefix, self.default_device_role)
+        logger.debug(f"Product type '{product_type}' (prefix: '{product_prefix}') mapped to role: '{mapped_role}'")
+        
+        return mapped_role
 
 
 class SiteNameRule(models.Model):

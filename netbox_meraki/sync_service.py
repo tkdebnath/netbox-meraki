@@ -470,12 +470,17 @@ class MerakiSyncService:
         serial = device['serial']
         name = device.get('name') or serial  # Use serial if name is None or empty
         model = device.get('model', 'Unknown')
-        product_type = device.get('productType', '')
         notes = device.get('notes', '')
         tags = device.get('tags', [])
         address = device.get('address', '')
         
-        logger.debug(f"Syncing device: {name} ({serial})")
+        # Extract product type: use productType if available, otherwise extract from model
+        product_type = device.get('productType', '')
+        if not product_type and model and len(model) >= 2:
+            # Get first two characters of model (e.g., "MS350-48LP" -> "MS")
+            product_type = model[:2].upper()
+        
+        logger.debug(f"Syncing device: {name} ({serial}) - Model: {model}, Product Type: {product_type}")
         
         # Get plugin settings
         plugin_settings = PluginSettings.get_settings()
@@ -485,6 +490,8 @@ class MerakiSyncService:
         
         # Get device role based on product type from settings
         role_name = plugin_settings.get_device_role_for_product(product_type)
+        
+        logger.info(f"Device {name}: model='{model}', product_type='{product_type}', assigned role='{role_name}'")
         
         # Get site name - handle both Site object and string
         site_name = site.name if hasattr(site, 'name') else site
@@ -1237,11 +1244,15 @@ class MerakiSyncService:
                     }
                 )
                 logger.info(f"{'Created' if created else 'Updated'} site: {data['name']}")
-                # Apply site tags
+                # Apply site tags (only if configured)
                 tag_names = plugin_settings.get_tags_for_object_type('site')
-                for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
-                    site.tags.add(tag)
+                if tag_names:
+                    for tag_name in tag_names:
+                        tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
+                        site.tags.add(tag)
+                
+                # Track synced site ID to prevent cleanup deletion
+                self.synced_object_ids['sites'].add(site.id)
                     
             elif item_type == 'device':
                 # Ensure site exists
@@ -1267,16 +1278,36 @@ class MerakiSyncService:
                     defaults={'slug': device_type_slug}
                 )
                 
+                # Get or create device role with product-type based defaults
+                product_type = data.get('product_type', '')
+                role_name = data['role']
+                
+                logger.info(f"Device role assignment: product_type='{product_type}', role_name='{role_name}'")
+                
                 # Generate proper slug for device role
-                device_role_slug = re.sub(r'[^a-z0-9-]+', '-', data['role'].lower()).strip('-')
+                device_role_slug = re.sub(r'[^a-z0-9-]+', '-', role_name.lower()).strip('-')
                 if not device_role_slug:
                     device_role_slug = 'unknown-role'
                 
+                # Set color based on product type
+                role_color_map = {
+                    'MX': 'f44336',  # Red for security appliances
+                    'MS': '2196f3',  # Blue for switches
+                    'MR': '4caf50',  # Green for wireless APs
+                    'MG': 'ff9800',  # Orange for cellular gateways
+                    'MV': '9c27b0',  # Purple for cameras
+                    'MT': '00bcd4',  # Cyan for sensors
+                }
+                product_prefix = product_type[:2].upper() if len(product_type) >= 2 else ''
+                role_color = role_color_map.get(product_prefix, '607d8b')  # Grey for unknown
+                
+                logger.info(f"Creating/getting role '{role_name}' with color '{role_color}' for product prefix '{product_prefix}'")
+                
                 device_role, _ = DeviceRole.objects.get_or_create(
-                    name=data['role'],
+                    name=role_name,
                     defaults={
                         'slug': device_role_slug,
-                        'color': '2196f3'
+                        'color': role_color
                     }
                 )
                 
@@ -1297,12 +1328,16 @@ class MerakiSyncService:
                     device.custom_field_data.update(data['custom_field_data'])
                     device.save()
                 
-                logger.info(f"{'Created' if created else 'Updated'} device: {data['name']} (Serial: {data['serial']})")
-                # Apply device tags
+                logger.info(f"{'Created' if created else 'Updated'} device: {data['name']} (Serial: {data['serial']})") 
+                # Apply device tags (only if configured)
                 tag_names = plugin_settings.get_tags_for_object_type('device')
-                for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
-                    device.tags.add(tag)
+                if tag_names:
+                    for tag_name in tag_names:
+                        tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
+                        device.tags.add(tag)
+                
+                # Track synced device ID to prevent cleanup deletion
+                self.synced_object_ids['devices'].add(device.id)
                     
             elif item_type == 'vlan':
                 try:
@@ -1331,11 +1366,15 @@ class MerakiSyncService:
                     }
                 )
                 logger.info(f"{'Created' if created else 'Updated'} VLAN {data['vid']}: {data['name']}")
-                # Apply VLAN tags
+                # Apply VLAN tags (only if configured)
                 tag_names = plugin_settings.get_tags_for_object_type('vlan')
-                for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
-                    vlan.tags.add(tag)
+                if tag_names:
+                    for tag_name in tag_names:
+                        tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
+                        vlan.tags.add(tag)
+                
+                # Track synced VLAN ID to prevent cleanup deletion
+                self.synced_object_ids['vlans'].add(vlan.id)
                     
             elif item_type == 'prefix':
                 try:
@@ -1385,11 +1424,15 @@ class MerakiSyncService:
                     created = True
                 
                 logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}")
-                # Apply prefix tags
+                # Apply prefix tags (only if configured)
                 tag_names = plugin_settings.get_tags_for_object_type('prefix')
-                for tag_name in tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
-                    prefix.tags.add(tag)
+                if tag_names:
+                    for tag_name in tag_names:
+                        tag, _ = Tag.objects.get_or_create(name=tag_name, defaults={'slug': tag_name.lower().replace(' ', '-')})
+                        prefix.tags.add(tag)
+                
+                # Track synced prefix ID to prevent cleanup deletion
+                self.synced_object_ids['prefixes'].add(prefix.id)
             
             elif item_type == 'interface':
                 # Find device by serial
