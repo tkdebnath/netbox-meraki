@@ -1344,17 +1344,18 @@ class MerakiSyncService:
                 except Site.DoesNotExist:
                     raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
                     
-                # Use get_or_create with site in the lookup to avoid conflicts across sites
+                # For NetBox 4.x: Use prefix as the unique lookup, site in defaults
                 prefix, created = Prefix.objects.get_or_create(
                     prefix=data['prefix'],
-                    site=site,
                     defaults={
+                        'site': site,
                         'status': 'active',
                         'description': data.get('description', ''),
                     }
                 )
                 # If it already exists, update the fields
                 if not created:
+                    prefix.site = site
                     prefix.status = 'active'
                     prefix.description = data.get('description', '')
                     prefix.save()
@@ -1406,30 +1407,26 @@ class MerakiSyncService:
             raise
     
     def _cleanup_orphaned_objects(self, meraki_tag: Tag):
-        """Delete objects with meraki tag that were not synced in this run"""
+        """Delete objects with meraki tag that were not synced in this run
+        
+        Order matters: Delete in reverse dependency order to avoid foreign key constraint errors
+        1. Prefixes (no dependencies)
+        2. VLANs (no dependencies)
+        3. Devices (depend on sites)
+        4. Sites (last, depended on by devices)
+        """
         logger.info("Checking for orphaned objects to clean up...")
         
-        # Clean up sites
-        all_meraki_sites = Site.objects.filter(tags=meraki_tag)
-        orphaned_sites = all_meraki_sites.exclude(id__in=self.synced_object_ids['sites'])
-        if orphaned_sites.exists():
-            count = orphaned_sites.count()
-            for site in orphaned_sites:
-                logger.info(f"Deleting orphaned site: {site.name} (ID: {site.id})")
-            orphaned_sites.delete()
-            self.stats['deleted_sites'] = count
-            logger.info(f"Deleted {count} orphaned site(s)")
-        
-        # Clean up devices
-        all_meraki_devices = Device.objects.filter(tags=meraki_tag)
-        orphaned_devices = all_meraki_devices.exclude(id__in=self.synced_object_ids['devices'])
-        if orphaned_devices.exists():
-            count = orphaned_devices.count()
-            for device in orphaned_devices:
-                logger.info(f"Deleting orphaned device: {device.name} (Serial: {device.serial}, ID: {device.id})")
-            orphaned_devices.delete()
-            self.stats['deleted_devices'] = count
-            logger.info(f"Deleted {count} orphaned device(s)")
+        # Clean up prefixes first
+        all_meraki_prefixes = Prefix.objects.filter(tags=meraki_tag)
+        orphaned_prefixes = all_meraki_prefixes.exclude(id__in=self.synced_object_ids['prefixes'])
+        if orphaned_prefixes.exists():
+            count = orphaned_prefixes.count()
+            for prefix in orphaned_prefixes:
+                logger.info(f"Deleting orphaned prefix: {prefix.prefix} (ID: {prefix.id})")
+            orphaned_prefixes.delete()
+            self.stats['deleted_prefixes'] = count
+            logger.info(f"Deleted {count} orphaned prefix(es)")
         
         # Clean up VLANs
         all_meraki_vlans = VLAN.objects.filter(tags=meraki_tag)
@@ -1442,15 +1439,26 @@ class MerakiSyncService:
             self.stats['deleted_vlans'] = count
             logger.info(f"Deleted {count} orphaned VLAN(s)")
         
-        # Clean up prefixes
-        all_meraki_prefixes = Prefix.objects.filter(tags=meraki_tag)
-        orphaned_prefixes = all_meraki_prefixes.exclude(id__in=self.synced_object_ids['prefixes'])
-        if orphaned_prefixes.exists():
-            count = orphaned_prefixes.count()
-            for prefix in orphaned_prefixes:
-                logger.info(f"Deleting orphaned prefix: {prefix.prefix} (ID: {prefix.id})")
-            orphaned_prefixes.delete()
-            self.stats['deleted_prefixes'] = count
-            logger.info(f"Deleted {count} orphaned prefix(s)")
+        # Clean up devices (before sites, as devices depend on sites)
+        all_meraki_devices = Device.objects.filter(tags=meraki_tag)
+        orphaned_devices = all_meraki_devices.exclude(id__in=self.synced_object_ids['devices'])
+        if orphaned_devices.exists():
+            count = orphaned_devices.count()
+            for device in orphaned_devices:
+                logger.info(f"Deleting orphaned device: {device.name} (Serial: {device.serial}, ID: {device.id})")
+            orphaned_devices.delete()
+            self.stats['deleted_devices'] = count
+            logger.info(f"Deleted {count} orphaned device(s)")
+        
+        # Clean up sites last (depended on by devices)
+        all_meraki_sites = Site.objects.filter(tags=meraki_tag)
+        orphaned_sites = all_meraki_sites.exclude(id__in=self.synced_object_ids['sites'])
+        if orphaned_sites.exists():
+            count = orphaned_sites.count()
+            for site in orphaned_sites:
+                logger.info(f"Deleting orphaned site: {site.name} (ID: {site.id})")
+            orphaned_sites.delete()
+            self.stats['deleted_sites'] = count
+            logger.info(f"Deleted {count} orphaned site(s)")
         
         logger.info("Orphaned object cleanup complete")
