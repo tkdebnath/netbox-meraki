@@ -1584,6 +1584,9 @@ class MerakiSyncService:
     def _cleanup_orphaned_objects(self, meraki_tag: Tag):
         """Delete objects with meraki tag that were not synced in this run
         
+        IMPORTANT: Only cleanup objects within sites that were synced in this run.
+        This prevents deleting objects from other networks when doing selective sync.
+        
         Order matters: Delete in reverse dependency order to avoid foreign key constraint errors
         1. Prefixes (no dependencies)
         2. VLANs (no dependencies)
@@ -1592,9 +1595,23 @@ class MerakiSyncService:
         """
         logger.info("Checking for orphaned objects to clean up...")
         
-        # Clean up prefixes first
+        # Get the sites that were synced in this run
+        synced_sites = Site.objects.filter(id__in=self.synced_object_ids['sites'])
+        
+        if not synced_sites.exists():
+            logger.info("No sites were synced, skipping orphaned object cleanup")
+            return
+        
+        logger.info(f"Will only cleanup orphaned objects within {synced_sites.count()} synced site(s)")
+        
+        # Clean up prefixes first - only within synced sites
         all_meraki_prefixes = Prefix.objects.filter(tags=meraki_tag)
-        orphaned_prefixes = all_meraki_prefixes.exclude(id__in=self.synced_object_ids['prefixes'])
+        # Filter to only prefixes that belong to synced sites
+        synced_site_prefixes = all_meraki_prefixes.filter(
+            scope_type=ContentType.objects.get_for_model(Site),
+            scope_id__in=[site.id for site in synced_sites]
+        )
+        orphaned_prefixes = synced_site_prefixes.exclude(id__in=self.synced_object_ids['prefixes'])
         if orphaned_prefixes.exists():
             count = orphaned_prefixes.count()
             for prefix in orphaned_prefixes:
@@ -1603,9 +1620,10 @@ class MerakiSyncService:
             self.stats['deleted_prefixes'] = count
             logger.info(f"Deleted {count} orphaned prefix(es)")
         
-        # Clean up VLANs
+        # Clean up VLANs - only within synced sites
         all_meraki_vlans = VLAN.objects.filter(tags=meraki_tag)
-        orphaned_vlans = all_meraki_vlans.exclude(id__in=self.synced_object_ids['vlans'])
+        synced_site_vlans = all_meraki_vlans.filter(site__in=synced_sites)
+        orphaned_vlans = synced_site_vlans.exclude(id__in=self.synced_object_ids['vlans'])
         if orphaned_vlans.exists():
             count = orphaned_vlans.count()
             for vlan in orphaned_vlans:
@@ -1614,9 +1632,10 @@ class MerakiSyncService:
             self.stats['deleted_vlans'] = count
             logger.info(f"Deleted {count} orphaned VLAN(s)")
         
-        # Clean up devices (before sites, as devices depend on sites)
+        # Clean up devices (before sites, as devices depend on sites) - only within synced sites
         all_meraki_devices = Device.objects.filter(tags=meraki_tag)
-        orphaned_devices = all_meraki_devices.exclude(id__in=self.synced_object_ids['devices'])
+        synced_site_devices = all_meraki_devices.filter(site__in=synced_sites)
+        orphaned_devices = synced_site_devices.exclude(id__in=self.synced_object_ids['devices'])
         if orphaned_devices.exists():
             count = orphaned_devices.count()
             for device in orphaned_devices:
@@ -1625,9 +1644,11 @@ class MerakiSyncService:
             self.stats['deleted_devices'] = count
             logger.info(f"Deleted {count} orphaned device(s)")
         
-        # Clean up sites last (depended on by devices)
+        # Clean up sites last (depended on by devices) - only sites that were synced
         all_meraki_sites = Site.objects.filter(tags=meraki_tag)
-        orphaned_sites = all_meraki_sites.exclude(id__in=self.synced_object_ids['sites'])
+        # Only consider sites that were part of this sync run for deletion
+        synced_meraki_sites = all_meraki_sites.filter(id__in=[site.id for site in synced_sites])
+        orphaned_sites = synced_meraki_sites.exclude(id__in=self.synced_object_ids['sites'])
         if orphaned_sites.exists():
             count = orphaned_sites.count()
             for site in orphaned_sites:
@@ -1637,3 +1658,4 @@ class MerakiSyncService:
             logger.info(f"Deleted {count} orphaned site(s)")
         
         logger.info("Orphaned object cleanup complete")
+

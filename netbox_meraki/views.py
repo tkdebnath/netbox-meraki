@@ -164,7 +164,21 @@ class ConfigView(LoginRequiredMixin, View):
     
     def post(self, request):
         settings_instance = PluginSettings.get_settings()
-        form = PluginSettingsForm(request.POST, instance=settings_instance)
+        
+        # Handle checkbox fields explicitly - unchecked checkboxes don't send data
+        post_data = request.POST.copy()
+        if 'process_unmatched_sites' not in post_data:
+            post_data['process_unmatched_sites'] = False
+        if 'auto_create_device_roles' not in post_data:
+            post_data['auto_create_device_roles'] = False
+        if 'enable_scheduled_sync' not in post_data:
+            post_data['enable_scheduled_sync'] = False
+        if 'enable_api_throttling' not in post_data:
+            post_data['enable_api_throttling'] = False
+        if 'enable_multithreading' not in post_data:
+            post_data['enable_multithreading'] = False
+        
+        form = PluginSettingsForm(post_data, instance=settings_instance)
         
         if form.is_valid():
             form.save()
