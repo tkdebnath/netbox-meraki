@@ -166,17 +166,25 @@ class ConfigView(LoginRequiredMixin, View):
         settings_instance = PluginSettings.get_settings()
         
         # Handle checkbox fields explicitly - unchecked checkboxes don't send data
+        # Django forms expect 'false' string or absence for False boolean values
         post_data = request.POST.copy()
-        if 'process_unmatched_sites' not in post_data:
-            post_data['process_unmatched_sites'] = False
-        if 'auto_create_device_roles' not in post_data:
-            post_data['auto_create_device_roles'] = False
-        if 'enable_scheduled_sync' not in post_data:
-            post_data['enable_scheduled_sync'] = False
-        if 'enable_api_throttling' not in post_data:
-            post_data['enable_api_throttling'] = False
-        if 'enable_multithreading' not in post_data:
-            post_data['enable_multithreading'] = False
+        
+        # For boolean fields, if not present in POST, it means unchecked
+        # We need to ensure they're not in the data so the form treats them as False
+        checkbox_fields = [
+            'process_unmatched_sites',
+            'auto_create_device_roles',
+            'enable_scheduled_sync',
+            'enable_api_throttling',
+            'enable_multithreading',
+        ]
+        
+        # Remove any checkbox fields that aren't checked (not in POST data)
+        # This ensures the form will set them to False
+        for field in checkbox_fields:
+            if field not in request.POST:
+                # Explicitly set to empty string or 'false' to ensure it's treated as False
+                post_data[field] = ''
         
         form = PluginSettingsForm(post_data, instance=settings_instance)
         

@@ -1617,6 +1617,22 @@ class MerakiSyncService:
                     site = Site.objects.get(name=data['site'])
                 except Site.DoesNotExist:
                     raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
+                
+                # Try to find VLAN by VID if specified
+                vlan_obj = None
+                if data.get('vlan'):
+                    # Extract VLAN ID from string like "VLAN 101"
+                    vlan_id_str = data['vlan']
+                    if 'VLAN' in vlan_id_str:
+                        vlan_id = int(vlan_id_str.split()[-1])
+                        # Find VLAN group for this site
+                        vlan_group = VLANGroup.objects.filter(name=f"{site.name} VLANs").first()
+                        if vlan_group:
+                            vlan_obj = VLAN.objects.filter(vid=vlan_id, group=vlan_group).first()
+                            if vlan_obj:
+                                logger.debug(f"Found VLAN {vlan_id} for prefix {data['prefix']}")
+                            else:
+                                logger.debug(f"VLAN {vlan_id} not found in group {vlan_group.name}")
                     
                 # For NetBox 4.x: Check if prefix exists first
                 existing_prefix = Prefix.objects.filter(prefix=data['prefix']).first()
@@ -1625,6 +1641,7 @@ class MerakiSyncService:
                     # Update existing prefix
                     existing_prefix.status = 'active'
                     existing_prefix.description = data.get('description', '')
+                    existing_prefix.vlan = vlan_obj
                     # NetBox 4.x uses scope_id and scope_type for site relationship
                     if hasattr(existing_prefix, 'scope_id'):
                         # NetBox 4.x approach
@@ -1646,6 +1663,7 @@ class MerakiSyncService:
                             prefix=data['prefix'],
                             status='active',
                             description=data.get('description', ''),
+                            vlan=vlan_obj,
                             scope_type=site_content_type,
                             scope_id=site.id
                         )
@@ -1655,11 +1673,12 @@ class MerakiSyncService:
                             prefix=data['prefix'],
                             status='active',
                             description=data.get('description', ''),
+                            vlan=vlan_obj,
                             site=site
                         )
                     created = True
                 
-                logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}")
+                logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}" + (f" with VLAN {vlan_obj.vid}" if vlan_obj else ""))
                 # Apply prefix tags (only if configured)
                 tag_names = plugin_settings.get_tags_for_object_type('prefix')
                 if tag_names:
