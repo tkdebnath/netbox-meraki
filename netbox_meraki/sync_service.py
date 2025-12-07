@@ -540,7 +540,7 @@ class MerakiSyncService:
                 'name': existing_device.name,
                 'serial': existing_device.serial,
                 'model': existing_device.device_type.model,
-                'role': existing_device.device_role.name,
+                'role': existing_device.role.name,
                 'site': existing_device.site.name,
                 'status': existing_device.status,
             }
@@ -1286,7 +1286,7 @@ class MerakiSyncService:
                     defaults={
                         'name': data['name'],
                         'device_type': device_type,
-                        'device_role': device_role,
+                        'role': device_role,
                         'site': site,
                         'status': data.get('status', 'active'),
                         'comments': data.get('comments', ''),
