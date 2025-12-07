@@ -270,24 +270,66 @@ class MerakiSyncService:
         if not slug:
             slug = f"site-{network_id.lower()}"
         
-        # Create or update site for this network
-        site, created = Site.objects.update_or_create(
-            name=site_name,
-            defaults={
-                'slug': slug,
-                'description': network_name,
-                'comments': f"Meraki Network ID: {network_id}\nOriginal Network Name: {network_name}\nTimezone: {network.get('timeZone', 'N/A')}",
+        # Check if site exists
+        existing_site = Site.objects.filter(name=site_name).first()
+        action_type = 'update' if existing_site else 'create'
+        current_data = None
+        
+        if existing_site:
+            current_data = {
+                'name': existing_site.name,
+                'slug': existing_site.slug,
+                'description': existing_site.description,
             }
-        )
         
-        if created:
-            logger.info(f"Created site: {site_name} (slug: {slug})")
+        # Prepare site data
+        proposed_site_data = {
+            'name': site_name,
+            'slug': slug,
+            'description': network_name,
+            'network_id': network_id,
+            'timezone': network.get('timeZone', 'N/A'),
+        }
+        
+        # Handle different sync modes
+        if self.sync_mode in ['review', 'dry_run']:
+            # Create review item for the site
+            self._create_review_item(
+                item_type='site',
+                action_type=action_type,
+                object_name=site_name,
+                object_identifier=network_id,
+                proposed_data=proposed_site_data,
+                current_data=current_data
+            )
+            logger.info(f"Created review item for site: {site_name} ({action_type})")
+            
+            # For devices, VLANs, prefixes: only process if site already exists
+            if not existing_site:
+                logger.info(f"Skipping devices/VLANs/prefixes for new site '{site_name}' in {self.sync_mode} mode - site must be approved first")
+                return
+            
+            site = existing_site
         else:
-            logger.debug(f"Updated site: {site_name}")
+            # Auto mode - create or update site immediately
+            site, created = Site.objects.update_or_create(
+                name=site_name,
+                defaults={
+                    'slug': slug,
+                    'description': network_name,
+                    'comments': f"Meraki Network ID: {network_id}\nOriginal Network Name: {network_name}\nTimezone: {network.get('timeZone', 'N/A')}",
+                }
+            )
+            
+            if created:
+                logger.info(f"Created site: {site_name} (slug: {slug})")
+            else:
+                logger.debug(f"Updated site: {site_name}")
+            
+            site.tags.add(meraki_tag)
+            self.synced_object_ids['sites'].add(site.id)
         
-        site.tags.add(meraki_tag)
-        self.synced_object_ids['sites'].add(site.id)
-        
+        # Process devices
         for device in devices:
             try:
                 self._sync_device(device, site, meraki_tag)

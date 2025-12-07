@@ -68,6 +68,56 @@ class PluginSettings(models.Model):
         help_text='Default synchronization mode: Auto (immediate), Review (requires approval), or Dry Run (preview only)'
     )
     
+    # Name transformation settings
+    device_name_transform = models.CharField(
+        max_length=20,
+        choices=[
+            ('keep', 'Keep Original'),
+            ('upper', 'UPPERCASE'),
+            ('lower', 'lowercase'),
+            ('title', 'Title Case'),
+        ],
+        default='keep',
+        verbose_name='Device Name Transform',
+        help_text='How to transform device names from Meraki'
+    )
+    site_name_transform = models.CharField(
+        max_length=20,
+        choices=[
+            ('keep', 'Keep Original'),
+            ('upper', 'UPPERCASE'),
+            ('lower', 'lowercase'),
+            ('title', 'Title Case'),
+        ],
+        default='keep',
+        verbose_name='Site Name Transform',
+        help_text='How to transform site names from Meraki'
+    )
+    vlan_name_transform = models.CharField(
+        max_length=20,
+        choices=[
+            ('keep', 'Keep Original'),
+            ('upper', 'UPPERCASE'),
+            ('lower', 'lowercase'),
+            ('title', 'Title Case'),
+        ],
+        default='keep',
+        verbose_name='VLAN Name Transform',
+        help_text='How to transform VLAN names from Meraki'
+    )
+    ssid_name_transform = models.CharField(
+        max_length=20,
+        choices=[
+            ('keep', 'Keep Original'),
+            ('upper', 'UPPERCASE'),
+            ('lower', 'lowercase'),
+            ('title', 'Title Case'),
+        ],
+        default='keep',
+        verbose_name='SSID Name Transform',
+        help_text='How to transform SSID names from Meraki'
+    )
+    
     # Scheduling Settings
     enable_scheduled_sync = models.BooleanField(
         default=False,
