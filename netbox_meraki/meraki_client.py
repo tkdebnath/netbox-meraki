@@ -3,6 +3,7 @@ Meraki API Client for interacting with Cisco Meraki Dashboard API
 """
 import requests
 import logging
+import time
 from typing import List, Dict, Optional
 from django.conf import settings
 
@@ -34,6 +35,21 @@ class MerakiAPIClient:
             'X-Cisco-Meraki-API-Key': self.api_key,
             'Content-Type': 'application/json'
         })
+        
+        # Rate limiting settings
+        self.last_request_time = 0
+        self.min_request_interval = 0.2  # 200ms = 5 requests/second (Meraki limit is 10/sec)
+    
+    def _rate_limit(self):
+        """Enforce rate limiting between API requests"""
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.min_request_interval:
+            sleep_time = self.min_request_interval - time_since_last_request
+            time.sleep(sleep_time)
+        
+        self.last_request_time = time.time()
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Dict:
         """
@@ -47,15 +63,37 @@ class MerakiAPIClient:
         Returns:
             Response JSON data
         """
+        # Apply rate limiting
+        self._rate_limit()
+        
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         
-        try:
-            response = self.session.request(method, url, **kwargs)
-            response.raise_for_status()
-            return response.json() if response.content else {}
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Meraki API request failed: {e}")
-            raise
+        max_retries = 3
+        retry_delay = 5  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = self.session.request(method, url, **kwargs)
+                
+                # Handle rate limiting (429 Too Many Requests)
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('Retry-After', retry_delay))
+                    logger.warning(f"Rate limited by Meraki API. Waiting {retry_after} seconds...")
+                    time.sleep(retry_after)
+                    continue
+                
+                response.raise_for_status()
+                return response.json() if response.content else {}
+                
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Meraki API request failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"Meraki API request failed after {max_retries} attempts: {e}")
+                    raise
+        
+        return {}
     
     def get_organizations(self) -> List[Dict]:
         """Get all organizations"""

@@ -360,24 +360,25 @@ class MerakiSyncService:
                 logger.error(error_msg)
                 self.errors.append(error_msg)
         
-        # Sync VLANs and prefixes only if site is a real Site object (not a string)
-        if isinstance(site, Site):
-            # Sync VLANs for this network
-            try:
-                self._sync_vlans(network_id, site, meraki_tag)
-            except Exception as e:
-                error_msg = f"Error syncing VLANs for network {network_name}: {str(e)}"
-                logger.error(error_msg)
-                self.errors.append(error_msg)
-            
-            # Sync prefixes for this network
-            try:
-                self._sync_prefixes(network_id, site, meraki_tag)
-            except Exception as e:
-                error_msg = f"Error syncing prefixes for network {network_name}: {str(e)}"
-                logger.error(error_msg)
-                self.errors.append(error_msg)
-        else:
+        # Sync VLANs and prefixes (now works in all modes via staging)
+        # Pass site name string so it works in review/dry-run mode
+        site_name_for_sync = site.name if isinstance(site, Site) else site
+        
+        # Sync VLANs for this network
+        try:
+            self._sync_vlans(network_id, site_name_for_sync, meraki_tag)
+        except Exception as e:
+            error_msg = f"Error syncing VLANs for network {network_name}: {str(e)}"
+            logger.error(error_msg)
+            self.errors.append(error_msg)
+        
+        # Sync prefixes for this network
+        try:
+            self._sync_prefixes(network_id, site_name_for_sync, meraki_tag)
+        except Exception as e:
+            error_msg = f"Error syncing prefixes for network {network_name}: {str(e)}"
+            logger.error(error_msg)
+            self.errors.append(error_msg)
             logger.info(f"Skipping VLANs/prefixes for new site '{site_name}' in review mode - will be synced after site is approved")
     
     def _sync_device(self, device: Dict, site: Site, meraki_tag: Tag):
@@ -733,8 +734,8 @@ class MerakiSyncService:
         
         return vlan_ids
     
-    def _sync_vlans(self, network_id: str, site: Site, meraki_tag: Tag):
-        """Sync VLANs for a network"""
+    def _sync_vlans(self, network_id: str, site_name: str, meraki_tag: Tag):
+        """Sync VLANs for a network - now works in all sync modes via staging"""
         try:
             vlans = self.client.get_appliance_vlans(network_id)
         except Exception as e:
@@ -745,29 +746,11 @@ class MerakiSyncService:
         if not vlans:
             return
         
-        logger.info(f"Syncing {len(vlans)} VLANs for {site.name}")
-        self.sync_log.add_progress_log(f"Syncing {len(vlans)} VLANs for {site.name}", "info")
+        logger.info(f"Syncing {len(vlans)} VLANs for {site_name}")
+        self.sync_log.add_progress_log(f"Syncing {len(vlans)} VLANs for {site_name}", "info")
         
-        # Create or get VLAN group for this site
-        import re
-        vlan_group_slug = re.sub(r'[^a-z0-9-]+', '-', site.name.lower()).strip('-')
-        if not vlan_group_slug:
-            vlan_group_slug = f"site-{site.id}"
-        vlan_group_slug = f"{vlan_group_slug}-vlans"
-        
-        vlan_group, created = VLANGroup.objects.get_or_create(
-            name=f"{site.name} VLANs",
-            defaults={
-                'slug': vlan_group_slug,
-            }
-        )
-        
-        if created:
-            logger.info(f"Created VLAN group: {vlan_group.name}")
-        
-        # Get plugin settings for transformations and tags
+        # Get plugin settings for transformations
         plugin_settings = PluginSettings.get_settings()
-        vlan_tag_names = plugin_settings.get_tags_for_object_type('vlan')
         
         for vlan_data in vlans:
             vlan_id = vlan_data.get('id')
@@ -777,36 +760,65 @@ class MerakiSyncService:
             vlan_name = plugin_settings.transform_name(vlan_name, plugin_settings.vlan_name_transform)
             
             try:
-                vlan, created = VLAN.objects.update_or_create(
-                    vid=vlan_id,
-                    group=vlan_group,
-                    defaults={
-                        'name': vlan_name,
-                        'status': 'active',
-                        'description': f"Subnet: {vlan_data.get('subnet', 'N/A')}",
+                # Check if VLAN exists
+                site_obj = Site.objects.filter(name=site_name).first()
+                if not site_obj:
+                    logger.debug(f"Site {site_name} not found, skipping VLAN {vlan_id} in review/dry-run mode")
+                    continue
+                    
+                vlan_group_name = f"{site_name} VLANs"
+                vlan_group = VLANGroup.objects.filter(name=vlan_group_name).first()
+                
+                existing_vlan = None
+                if vlan_group:
+                    existing_vlan = VLAN.objects.filter(vid=vlan_id, group=vlan_group).first()
+                
+                action_type = 'update' if existing_vlan else 'create'
+                current_data = None
+                
+                if existing_vlan:
+                    current_data = {
+                        'vid': existing_vlan.vid,
+                        'name': existing_vlan.name,
+                        'description': existing_vlan.description,
+                        'site': site_name,
                     }
+                
+                # Prepare VLAN data
+                proposed_data = {
+                    'vid': vlan_id,
+                    'name': vlan_name,
+                    'site': site_name,
+                    'description': f"Subnet: {vlan_data.get('subnet', 'N/A')}",
+                    'status': 'active',
+                }
+                
+                # All sync modes: Create review item (staging) first
+                review_item = self._create_review_item(
+                    item_type='vlan',
+                    action_type=action_type,
+                    object_name=vlan_name,
+                    object_identifier=f"{site_name}-VLAN-{vlan_id}",
+                    proposed_data=proposed_data,
+                    current_data=current_data
                 )
                 
-                if created:
-                    logger.info(f"Created VLAN {vlan_id}: {vlan_name} in {site.name}")
-                    self.sync_log.add_progress_log(f"✓ Created VLAN {vlan_id}: {vlan_name} at {site.name}", "success")
+                # Auto mode: Immediately approve and apply
+                if self.sync_mode == 'auto' and review_item:
+                    review_item.status = 'approved'
+                    review_item.save()
+                    self.apply_review_item(review_item)
+                    self.sync_log.add_progress_log(f"✓ Created/Updated VLAN {vlan_id}: {vlan_name} at {site_name}", "success")
+                    self.stats['vlans'] += 1
                 else:
-                    logger.debug(f"Updated VLAN {vlan_id}: {vlan_name}")
-                    self.sync_log.add_progress_log(f"✓ Updated VLAN {vlan_id}: {vlan_name} at {site.name}", "success")
-                
-                # Apply configured VLAN tags
-                for tag_name in vlan_tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
-                    vlan.tags.add(tag)
-                    
-                self.synced_object_ids['vlans'].add(vlan.id)
-                self.stats['vlans'] += 1
+                    # Review/Dry-run mode: Just count staged items
+                    self.stats['vlans'] += 1
                 
             except Exception as e:
                 logger.warning(f"Could not sync VLAN {vlan_id}: {e}")
     
-    def _sync_prefixes(self, network_id: str, site: Site, meraki_tag: Tag):
-        """Sync prefixes/subnets for a network"""
+    def _sync_prefixes(self, network_id: str, site_name: str, meraki_tag: Tag):
+        """Sync prefixes/subnets for a network - now works in all sync modes via staging"""
         try:
             subnets = self.client.get_appliance_subnets(network_id)
         except Exception as e:
@@ -817,16 +829,8 @@ class MerakiSyncService:
         if not subnets:
             return
         
-        logger.info(f"Syncing {len(subnets)} prefixes for {site.name}")
-        self.sync_log.add_progress_log(f"Syncing {len(subnets)} prefixes/subnets for {site.name}", "info")
-        
-        # Get VLAN group for this site
-        vlan_group_name = f"{site.name} VLANs"
-        vlan_group = VLANGroup.objects.filter(name=vlan_group_name).first()
-        
-        # Get plugin settings for tags
-        plugin_settings = PluginSettings.get_settings()
-        prefix_tag_names = plugin_settings.get_tags_for_object_type('prefix')
+        logger.info(f"Syncing {len(subnets)} prefixes for {site_name}")
+        self.sync_log.add_progress_log(f"Syncing {len(subnets)} prefixes/subnets for {site_name}", "info")
         
         for subnet_data in subnets:
             subnet = subnet_data.get('subnet')
@@ -840,56 +844,48 @@ class MerakiSyncService:
                 # Validate subnet format
                 network = ip_network(subnet, strict=False)
                 
-                # Try to find the corresponding VLAN
-                vlan = None
-                if vlan_id and vlan_group:
-                    vlan = VLAN.objects.filter(
-                        vid=vlan_id,
-                        group=vlan_group
-                    ).first()
-                
-                # Check if prefix exists and needs site update
+                # Check if prefix exists
                 existing_prefix = Prefix.objects.filter(prefix=str(network)).first()
-                site_changed = False
+                action_type = 'update' if existing_prefix else 'create'
+                current_data = None
                 
-                if existing_prefix and existing_prefix.site and existing_prefix.site.id != site.id:
-                    logger.info(f"Prefix {network} site changed: {existing_prefix.site.name} -> {site.name}")
-                    site_changed = True
-                    self.stats['updated_prefixes'] += 1
+                if existing_prefix:
+                    current_data = {
+                        'prefix': str(existing_prefix.prefix),
+                        'site': existing_prefix.site.name if existing_prefix.site else None,
+                        'description': existing_prefix.description,
+                        'status': existing_prefix.status,
+                    }
                 
-                # Prepare prefix defaults
-                prefix_defaults = {
-                    'site_id': site.id,
+                # Prepare prefix data
+                proposed_data = {
+                    'prefix': str(network),
+                    'site': site_name,
+                    'vlan': f"VLAN {vlan_id}" if vlan_id else None,
                     'status': 'active',
                     'description': f"VLAN {vlan_id}: {vlan_name}" if vlan_id else "Meraki Subnet",
                 }
                 
-                # Add VLAN if found
-                if vlan:
-                    prefix_defaults['vlan_id'] = vlan.id
-                
-                prefix, created = Prefix.objects.update_or_create(
-                    prefix=str(network),
-                    defaults=prefix_defaults
+                # All sync modes: Create review item (staging) first
+                review_item = self._create_review_item(
+                    item_type='prefix',
+                    action_type=action_type,
+                    object_name=str(network),
+                    object_identifier=str(network),
+                    proposed_data=proposed_data,
+                    current_data=current_data
                 )
                 
-                if created:
-                    logger.debug(f"Created prefix: {network} (Site: {site.name}, VLAN: {vlan_id})")
-                    self.sync_log.add_progress_log(f"✓ Created prefix: {network} at {site.name}", "success")
-                elif site_changed:
-                    logger.info(f"Updated prefix site: {network} -> {site.name}")
-                    self.sync_log.add_progress_log(f"✓ Updated prefix: {network} -> moved to {site.name}", "success")
+                # Auto mode: Immediately approve and apply
+                if self.sync_mode == 'auto' and review_item:
+                    review_item.status = 'approved'
+                    review_item.save()
+                    self.apply_review_item(review_item)
+                    self.sync_log.add_progress_log(f"✓ Created/Updated prefix: {network} at {site_name}", "success")
+                    self.stats['prefixes'] += 1
                 else:
-                    logger.debug(f"Updated prefix: {network} (Site: {site.name}, VLAN: {vlan_id})")
-                    self.sync_log.add_progress_log(f"✓ Updated prefix: {network} at {site.name}", "success")
-                
-                # Apply configured prefix tags
-                for tag_name in prefix_tag_names:
-                    tag, _ = Tag.objects.get_or_create(name=tag_name)
-                    prefix.tags.add(tag)
-                    
-                self.synced_object_ids['prefixes'].add(prefix.id)
-                self.stats['prefixes'] += 1
+                    # Review/Dry-run mode: Just count staged items
+                    self.stats['prefixes'] += 1
                 
             except Exception as e:
                 logger.warning(f"Could not sync prefix {subnet}: {e}")
@@ -1061,9 +1057,16 @@ class MerakiSyncService:
                     
             elif item_type == 'vlan':
                 site = Site.objects.get(name=data['site'])
+                # Generate proper slug
+                import re
+                vlan_group_slug = re.sub(r'[^a-z0-9-]+', '-', site.name.lower()).strip('-')
+                if not vlan_group_slug:
+                    vlan_group_slug = f"site-{site.id}"
+                vlan_group_slug = f"{vlan_group_slug}-vlans"
+                
                 vlan_group, _ = VLANGroup.objects.get_or_create(
                     name=f"{site.name} VLANs",
-                    defaults={'slug': f"{site.name.lower().replace(' ', '-')}-vlans"}
+                    defaults={'slug': vlan_group_slug}
                 )
                 vlan, _ = VLAN.objects.update_or_create(
                     vid=data['vid'],

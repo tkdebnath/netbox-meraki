@@ -2,6 +2,9 @@ from django.db import models
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PluginSettings(models.Model):
@@ -315,12 +318,12 @@ class SiteNameRule(models.Model):
     regex_pattern = models.CharField(
         max_length=500,
         verbose_name='Regex Pattern',
-        help_text='Regular expression pattern to match network names (e.g., "asia-south-.*-oil")'
+        help_text='Regular expression to match network names (e.g., "^(?P<region>NA|EMEA)-(?P<site>[A-Z]{3})$"). Use (?P<name>...) for named groups'
     )
     site_name_template = models.CharField(
         max_length=200,
         verbose_name='Site Name Template',
-        help_text='Template for site name. Use {0}, {1}, etc. for regex groups, or {network_name} for full name'
+        help_text='Template for site name. Use {name} for named groups, {0}/{1} for numbered groups, or {network_name} for full name'
     )
     priority = models.IntegerField(
         default=100,
@@ -346,10 +349,17 @@ class SiteNameRule(models.Model):
     def clean(self):
         """Validate regex pattern"""
         try:
+            # Check for common mistakes
+            if '??<' in self.regex_pattern:
+                raise ValidationError({
+                    'regex_pattern': 'Invalid named group syntax. Use (?P<name>...) instead of (??<name>...)'
+                })
+            
+            # Try to compile the regex
             re.compile(self.regex_pattern)
         except re.error as e:
             raise ValidationError({
-                'regex_pattern': f'Invalid regular expression: {str(e)}'
+                'regex_pattern': f'Invalid regular expression: {str(e)}. For named groups, use (?P<name>...)'
             })
     
     def apply(self, network_name: str) -> str:
@@ -360,12 +370,19 @@ class SiteNameRule(models.Model):
         try:
             match = re.match(self.regex_pattern, network_name)
             if match:
-                # Replace numbered groups {0}, {1}, etc.
+                # Start with the template
                 result = self.site_name_template
+                
+                # Replace named groups first (e.g., {site}, {location})
+                for name, value in match.groupdict().items():
+                    if value:
+                        result = result.replace(f'{{{name}}}', value)
+                
+                # Replace numbered groups {0}, {1}, etc.
                 for i, group in enumerate(match.groups()):
                     result = result.replace(f'{{{i}}}', group or '')
                 
-                # Replace named placeholders
+                # Replace special placeholders
                 result = result.replace('{network_name}', network_name)
                 
                 return result.strip()
@@ -517,21 +534,31 @@ class SyncReview(models.Model):
         return reverse('plugins:netbox_meraki:review_detail', args=[self.pk])
     
     def apply_approved_items(self):
-        """Apply all approved review items"""
+        """Apply all approved review items in correct dependency order"""
         from .sync_service import MerakiSyncService
         
-        approved_items = self.items.filter(status='approved')
         service = MerakiSyncService()
         
-        for item in approved_items:
-            try:
-                service.apply_review_item(item)
-                item.status = 'applied'
-                item.save()
-            except Exception as e:
-                item.status = 'failed'
-                item.error_message = str(e)
-                item.save()
+        # Define the correct order for applying items (dependencies first)
+        item_order = ['site', 'vlan', 'prefix', 'device_type', 'device', 'interface', 'ip_address', 'ssid']
+        
+        # Apply items in dependency order
+        for item_type in item_order:
+            approved_items = self.items.filter(status='approved', item_type=item_type).order_by('id')
+            
+            for item in approved_items:
+                try:
+                    service.apply_review_item(item)
+                    item.status = 'applied'
+                    item.save()
+                except Exception as e:
+                    item.status = 'failed'
+                    item.error_message = str(e)
+                    item.save()
+                    # Log but continue with other items
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Failed to apply {item_type} {item.object_name}: {e}")
         
         self.status = 'applied'
         self.save()
