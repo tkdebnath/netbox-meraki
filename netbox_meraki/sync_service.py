@@ -270,6 +270,17 @@ class MerakiSyncService:
         
         logger.info(f"Syncing organization: {org_name}")
         
+        # Fetch device statuses for the entire organization (includes firmware)
+        try:
+            self.sync_log.add_progress_log(f"Fetching device statuses from organization: {org_name}", "info")
+            device_statuses = self.client.get_device_statuses(org_id)
+            # Create lookup dictionary by serial number
+            device_status_map = {status['serial']: status for status in device_statuses}
+            logger.info(f"Fetched status for {len(device_statuses)} devices in {org_name}")
+        except Exception as e:
+            logger.warning(f"Could not fetch device statuses for {org_name}: {e}")
+            device_status_map = {}
+        
         # Get networks for this organization
         self.sync_log.add_progress_log(f"Fetching networks from organization: {org_name}", "info")
         networks = self.client.get_networks(org_id)
@@ -285,15 +296,25 @@ class MerakiSyncService:
         
         for network in networks:
             try:
-                self._sync_network(network, org_name, meraki_tag)
+                self._sync_network(network, org_name, meraki_tag, device_status_map)
                 self.stats['networks'] += 1
             except Exception as e:
                 error_msg = f"Error syncing network {network.get('name')}: {str(e)}"
                 logger.error(error_msg)
                 self.errors.append(error_msg)
     
-    def _sync_network(self, network: Dict, org_name: str, meraki_tag: Tag):
-        """Sync a single network as a Site"""
+    def _sync_network(self, network: Dict, org_name: str, meraki_tag: Tag, device_status_map: Dict = None):
+        """Sync a single network as a Site
+        
+        Args:
+            network: Network data from Meraki API
+            org_name: Organization name
+            meraki_tag: Tag to apply to synced objects
+            device_status_map: Dictionary of device statuses by serial number (includes firmware)
+        """
+        if device_status_map is None:
+            device_status_map = {}
+            
         network_id = network['id']
         network_name = network['name']
         
@@ -302,6 +323,26 @@ class MerakiSyncService:
         # Get devices in this network first to check if we should create the site
         self.sync_log.add_progress_log(f"Fetching devices from network: {network_name}", "info")
         devices = self.client.get_devices(network_id)
+        
+        # Merge firmware information from device statuses
+        firmware_count = 0
+        for device in devices:
+            serial = device.get('serial')
+            if serial and serial in device_status_map:
+                status_info = device_status_map[serial]
+                # Merge firmware version from status API
+                if 'firmware' in status_info and status_info['firmware']:
+                    device['firmware'] = status_info['firmware']
+                    firmware_count += 1
+                # Also merge other useful status info
+                if 'status' in status_info:
+                    device['status'] = status_info['status']
+                if 'publicIp' in status_info:
+                    device['publicIp'] = status_info['publicIp']
+        
+        if firmware_count > 0:
+            logger.info(f"Merged firmware info for {firmware_count}/{len(devices)} devices in {network_name}")
+        
         logger.info(f"Found {len(devices)} devices in {network_name}")
         self.sync_log.add_progress_log(f"Found {len(devices)} devices in {network_name}", "info")
         
@@ -368,12 +409,21 @@ class MerakiSyncService:
         
         # Auto mode: Immediately approve and apply
         if self.sync_mode == 'auto' and review_item:
-            review_item.status = 'approved'
-            review_item.save()
-            self.apply_review_item(review_item)
-            site = Site.objects.get(name=site_name)
-            self.stats['sites'] += 1
-            self.sync_log.add_progress_log(f"✓ Created/Updated site: {site_name}", "success")
+            try:
+                review_item.status = 'approved'
+                review_item.save()
+                self.apply_review_item(review_item)
+                review_item.status = 'applied'
+                review_item.save()
+                site = Site.objects.get(name=site_name)
+                self.stats['sites'] += 1
+                self.sync_log.add_progress_log(f"✓ Created/Updated site: {site_name}", "success")
+            except Exception as e:
+                review_item.status = 'failed'
+                review_item.error_message = str(e)
+                review_item.save()
+                logger.error(f"Failed to apply site {site_name}: {e}")
+                raise
         else:
             # Review/Dry-run mode: Use existing site or site name for device references
             site = existing_site if existing_site else site_name
@@ -442,12 +492,16 @@ class MerakiSyncService:
                 wan_ip = raw_wan_ip
         
         # Prepare proposed data (don't create device types/roles yet in review mode)
+        firmware_version = device.get('firmware', 'Unknown')
         comments = f"MAC: {device.get('mac', 'N/A')}\\n"
         comments += f"LAN IP: {device.get('lanIp', 'N/A')}\\n"
         if wan_ip:
             comments += f"WAN IP: {wan_ip}\\n"
-        comments += f"Firmware: {device.get('firmware', 'N/A')}\\n"
+        comments += f"Firmware: {firmware_version}\\n"
         comments += f"Product Type: {product_type}"
+        
+        if firmware_version and firmware_version != 'Unknown':
+            logger.debug(f"Device {name} firmware: {firmware_version}")
         
         proposed_data = {
             'name': name,
@@ -461,8 +515,12 @@ class MerakiSyncService:
             'mac': device.get('mac', 'N/A'),
             'lan_ip': device.get('lanIp', 'N/A'),
             'wan_ip': wan_ip if wan_ip else 'N/A',
-            'firmware': device.get('firmware', 'N/A'),
+            'firmware': firmware_version,
             'comments': comments,
+            'custom_field_data': {
+                'meraki_firmware': firmware_version if firmware_version != 'Unknown' else '',
+                'meraki_network_id': device.get('networkId', ''),
+            }
         }
         
         # Check if device exists
@@ -495,22 +553,34 @@ class MerakiSyncService:
         
         # Auto mode: Immediately approve and apply
         if self.sync_mode == 'auto' and review_item:
-            review_item.status = 'approved'
-            review_item.save()
-            self.apply_review_item(review_item)
-            self.sync_log.add_progress_log(f"✓ Created/Updated device: {name} (Serial: {serial})", "success")
-            
-            # For MX devices with WAN IP, create WAN interface and IP address
-            if raw_wan_ip:
-                self._create_wan_interface_and_ip(serial, name, str(wan_ip), str(raw_wan_ip))
-            
-            # For MR (wireless) devices, sync SSIDs
-            if product_type.startswith('MR'):
-                try:
-                    device_obj = Device.objects.get(serial=serial)
-                    self._sync_device_ssids(device_obj, device)
-                except Exception as e:
-                    logger.warning(f"Could not sync SSIDs for {name}: {e}")
+            try:
+                review_item.status = 'approved'
+                review_item.save()
+                self.apply_review_item(review_item)
+                review_item.status = 'applied'
+                review_item.save()
+                self.sync_log.add_progress_log(f"✓ Created/Updated device: {name} (Serial: {serial})", "success")
+                
+                # Get the device object for additional operations
+                device_obj = Device.objects.get(serial=serial)
+                
+                # For MX devices with WAN IP, create WAN interface and IP address
+                if raw_wan_ip:
+                    self._create_wan_interface_and_ip(serial, name, str(wan_ip), str(raw_wan_ip))
+                
+                # For MR (wireless) devices, sync SSIDs
+                if product_type.startswith('MR'):
+                    try:
+                        self._sync_device_ssids(device_obj, device)
+                        logger.info(f"✓ Synced SSIDs for {name}")
+                    except Exception as e:
+                        logger.warning(f"Could not sync SSIDs for {name}: {e}")
+            except Exception as e:
+                review_item.status = 'failed'
+                review_item.error_message = str(e)
+                review_item.save()
+                logger.error(f"Failed to apply device {name}: {e}")
+                raise
             
             return
         
@@ -584,8 +654,9 @@ class MerakiSyncService:
                     if enabled_ssids:
                         ssid_list = ', '.join(enabled_ssids)
                         device.custom_field_data['meraki_ssids'] = ssid_list
+                        device.save()
                         self.stats['ssids'] += len(enabled_ssids)
-                        logger.debug(f"Added SSIDs to AP {device.name}: {ssid_list}")
+                        logger.info(f"✓ Added {len(enabled_ssids)} SSIDs to AP {device.name}: {ssid_list}")
             except Exception as e:
                 logger.debug(f"Could not fetch SSIDs for AP {device.name}: {e}")
         except Exception as e:
@@ -903,10 +974,18 @@ class MerakiSyncService:
                 
                 # Auto mode: Immediately approve and apply
                 if self.sync_mode == 'auto' and review_item:
-                    review_item.status = 'approved'
-                    review_item.save()
-                    self.apply_review_item(review_item)
-                    self.sync_log.add_progress_log(f"✓ Created/Updated VLAN {vlan_id}: {vlan_name} at {site_name}", "success")
+                    try:
+                        review_item.status = 'approved'
+                        review_item.save()
+                        self.apply_review_item(review_item)
+                        review_item.status = 'applied'
+                        review_item.save()
+                        self.sync_log.add_progress_log(f"✓ Created/Updated VLAN {vlan_id}: {vlan_name} at {site_name}", "success")
+                    except Exception as e:
+                        review_item.status = 'failed'
+                        review_item.error_message = str(e)
+                        review_item.save()
+                        logger.error(f"Failed to apply VLAN {vlan_id} at {site_name}: {e}")
                     self.stats['vlans'] += 1
                 else:
                     # Review/Dry-run mode: Just count staged items
@@ -981,10 +1060,18 @@ class MerakiSyncService:
                 
                 # Auto mode: Immediately approve and apply
                 if self.sync_mode == 'auto' and review_item:
-                    review_item.status = 'approved'
-                    review_item.save()
-                    self.apply_review_item(review_item)
-                    self.sync_log.add_progress_log(f"✓ Created/Updated prefix: {network} at {site_name}", "success")
+                    try:
+                        review_item.status = 'approved'
+                        review_item.save()
+                        self.apply_review_item(review_item)
+                        review_item.status = 'applied'
+                        review_item.save()
+                        self.sync_log.add_progress_log(f"✓ Created/Updated prefix: {network} at {site_name}", "success")
+                    except Exception as e:
+                        review_item.status = 'failed'
+                        review_item.error_message = str(e)
+                        review_item.save()
+                        logger.error(f"Failed to apply prefix {network} at {site_name}: {e}")
                     self.stats['prefixes'] += 1
                 else:
                     # Review/Dry-run mode: Just count staged items
@@ -1155,15 +1242,28 @@ class MerakiSyncService:
                     name=data.get('manufacturer', 'Cisco Meraki'),
                     defaults={'slug': 'cisco-meraki'}
                 )
+                
+                # Generate proper slug for device type (handle special characters)
+                import re
+                device_type_slug = re.sub(r'[^a-z0-9-]+', '-', data['model'].lower()).strip('-')
+                if not device_type_slug:
+                    device_type_slug = f"device-{data['serial'].lower()}"
+                
                 device_type, _ = DeviceType.objects.get_or_create(
                     model=data['model'],
                     manufacturer=manufacturer,
-                    defaults={'slug': data['model'].lower().replace(' ', '-')}
+                    defaults={'slug': device_type_slug}
                 )
+                
+                # Generate proper slug for device role
+                device_role_slug = re.sub(r'[^a-z0-9-]+', '-', data['role'].lower()).strip('-')
+                if not device_role_slug:
+                    device_role_slug = 'unknown-role'
+                
                 device_role, _ = DeviceRole.objects.get_or_create(
                     name=data['role'],
                     defaults={
-                        'slug': data['role'].lower().replace(' ', '-'),
+                        'slug': device_role_slug,
                         'color': '2196f3'
                     }
                 )
@@ -1179,6 +1279,12 @@ class MerakiSyncService:
                         'comments': data.get('comments', ''),
                     }
                 )
+                
+                # Set custom field data if provided
+                if 'custom_field_data' in data and data['custom_field_data']:
+                    device.custom_field_data.update(data['custom_field_data'])
+                    device.save()
+                
                 logger.info(f"{'Created' if created else 'Updated'} device: {data['name']} (Serial: {data['serial']})")
                 # Apply device tags
                 tag_names = plugin_settings.get_tags_for_object_type('device')
