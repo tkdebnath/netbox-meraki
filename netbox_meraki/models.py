@@ -943,6 +943,18 @@ class ScheduledSyncTask(models.Model):
         default=True,
         help_text='Sync prefixes/subnets'
     )
+    sync_interfaces = models.BooleanField(
+        default=True,
+        help_text='Sync device interfaces'
+    )
+    sync_ip_addresses = models.BooleanField(
+        default=True,
+        help_text='Sync IP addresses'
+    )
+    sync_ssids = models.BooleanField(
+        default=True,
+        help_text='Sync wireless SSIDs'
+    )
     
     cleanup_orphaned = models.BooleanField(
         default=False,
