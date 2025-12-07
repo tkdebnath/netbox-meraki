@@ -1343,29 +1343,39 @@ class MerakiSyncService:
                 except Site.DoesNotExist:
                     raise Exception(f"Site '{data['site']}' does not exist. Please ensure sites are created first.")
                     
-                # For NetBox 4.x: Check if prefix exists at this site first
-                existing_prefix = Prefix.objects.filter(prefix=data['prefix'], site=site).first()
+                # For NetBox 4.x: Check if prefix exists first
+                existing_prefix = Prefix.objects.filter(prefix=data['prefix']).first()
                 
                 if existing_prefix:
                     # Update existing prefix
                     existing_prefix.status = 'active'
                     existing_prefix.description = data.get('description', '')
+                    # Use set() for the site relationship in NetBox 4.x
+                    if hasattr(existing_prefix, 'sites'):
+                        # ManyToMany relationship (NetBox 4.x)
+                        existing_prefix.sites.set([site])
+                    else:
+                        # ForeignKey relationship (older NetBox)
+                        existing_prefix.site = site
                     existing_prefix.save()
                     prefix = existing_prefix
                     created = False
                 else:
-                    # Create new prefix - use update_or_create with just prefix as lookup
-                    prefix, created = Prefix.objects.update_or_create(
+                    # Create new prefix
+                    prefix = Prefix.objects.create(
                         prefix=data['prefix'],
-                        defaults={
-                            'status': 'active',
-                            'description': data.get('description', ''),
-                        }
+                        status='active',
+                        description=data.get('description', ''),
                     )
-                    # Set the site separately after creation
-                    if prefix.site != site:
+                    # Use set() for the site relationship in NetBox 4.x
+                    if hasattr(prefix, 'sites'):
+                        # ManyToMany relationship (NetBox 4.x)
+                        prefix.sites.set([site])
+                    else:
+                        # ForeignKey relationship (older NetBox)
                         prefix.site = site
                         prefix.save()
+                    created = True
                 
                 logger.info(f"{'Created' if created else 'Updated'} prefix: {data['prefix']} at site {site.name}")
                 # Apply prefix tags
