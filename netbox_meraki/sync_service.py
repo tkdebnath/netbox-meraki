@@ -665,16 +665,6 @@ class MerakiSyncService:
             # Get plugin settings for transformations
             plugin_settings = PluginSettings.get_settings()
             
-            # Get or create Wireless LAN Group for this site
-            site = device.site
-            wlan_group, _ = WirelessLANGroup.objects.get_or_create(
-                name=f"{site.name} Wireless",
-                defaults={
-                    'slug': f"{site.slug}-wireless",
-                    'description': f'Wireless LANs for {site.name}'
-                }
-            )
-            
             # Fetch SSIDs for this network
             try:
                 ssids = self.client.get_wireless_ssids(network_id)
@@ -694,21 +684,17 @@ class MerakiSyncService:
                             plugin_settings.ssid_name_transform
                         )
                         
-                        # Generate slug from SSID name
-                        import re
-                        ssid_slug = re.sub(r'[^a-z0-9-]+', '-', ssid_name.lower()).strip('-')
-                        if not ssid_slug:
-                            ssid_slug = f"ssid-{ssid_number}"
-                        
-                        # Create or update Wireless LAN
+                        # Create or update Wireless LAN (without group - SSIDs are organization-wide)
                         wlan, created = WirelessLAN.objects.update_or_create(
                             ssid=ssid_name,
-                            group=wlan_group,
                             defaults={
                                 'description': f"Meraki SSID #{ssid_number} - Auth: {auth_mode}, Encryption: {encryption}",
                                 'status': 'active',
                             }
                         )
+                        
+                        if created:
+                            logger.info(f"✓ Created Wireless LAN '{ssid_name}'")
                         
                         # Associate the wireless LAN with this interface
                         # Find or create a wireless interface on the AP
@@ -778,18 +764,31 @@ class MerakiSyncService:
                     else:
                         ip_address_str = f"{appliance_ip}/24"  # Default to /24
                     
-                    ip_address, ip_created = IPAddress.objects.get_or_create(
-                        address=ip_address_str,
-                        defaults={
-                            'description': f'{vlan_name} SVI on {device.name}',
-                            'status': 'active',
-                        }
-                    )
+                    # Check if IP already exists
+                    existing_ip = IPAddress.objects.filter(address=ip_address_str).first()
                     
-                    # Assign IP to interface
-                    if not ip_address.assigned_object:
-                        ip_address.assigned_object = interface
-                        ip_address.save()
+                    if existing_ip:
+                        # IP exists - check if it's assigned to a different device's interface
+                        if existing_ip.assigned_object and existing_ip.assigned_object.device != device:
+                            # IP belongs to another device (e.g., HA pair), skip assignment
+                            logger.debug(f"IP {appliance_ip} already assigned to {existing_ip.assigned_object.device.name}, skipping for {device.name}")
+                        elif not existing_ip.assigned_object:
+                            # IP exists but not assigned, assign it to this interface
+                            existing_ip.assigned_object = interface
+                            existing_ip.description = f'{vlan_name} SVI on {device.name}'
+                            existing_ip.save()
+                            logger.info(f"✓ Assigned existing IP {appliance_ip} to {interface_name} on {device.name}")
+                        else:
+                            # Already assigned to this device's interface
+                            logger.debug(f"IP {appliance_ip} already assigned to {interface_name} on {device.name}")
+                    else:
+                        # Create new IP and assign to interface
+                        ip_address = IPAddress.objects.create(
+                            address=ip_address_str,
+                            description=f'{vlan_name} SVI on {device.name}',
+                            status='active',
+                            assigned_object=interface
+                        )
                         logger.info(f"✓ Assigned IP {appliance_ip} to {interface_name} on {device.name}")
                         
         except Exception as e:
