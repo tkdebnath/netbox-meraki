@@ -189,11 +189,12 @@ if system_job is not None:
                 task.save()
                 
                 self.logger.info(f'  Mode: {task.sync_mode}')
+                self.logger.info(f'  Execution: {task.execution_mode}')
                 self.logger.info(f'  Components: Orgs={task.sync_organizations}, Sites={task.sync_sites}, '
                                f'Devices={task.sync_devices}, VLANs={task.sync_vlans}, Prefixes={task.sync_prefixes}')
                 
-                # Initialize sync service
-                sync_service = MerakiSyncService()
+                # Initialize sync service with execution mode
+                sync_service = MerakiSyncService(sync_mode=task.execution_mode)
                 
                 # Execute sync based on mode - sync_all handles all modes via network_ids parameter
                 if task.sync_mode == 'full':
@@ -327,11 +328,12 @@ else:
                 task.save()
                 
                 self.logger.info(f'  Mode: {task.sync_mode}')
+                self.logger.info(f'  Execution: {task.execution_mode}')
                 self.logger.info(f'  Components: Orgs={task.sync_organizations}, Sites={task.sync_sites}, '
                                f'Devices={task.sync_devices}, VLANs={task.sync_vlans}, Prefixes={task.sync_prefixes}')
                 
-                # Initialize sync service
-                sync_service = MerakiSyncService()
+                # Initialize sync service with execution mode
+                sync_service = MerakiSyncService(sync_mode=task.execution_mode)
                 
                 # Execute sync based on mode - sync_all handles all modes via network_ids parameter
                 if task.sync_mode == 'full':

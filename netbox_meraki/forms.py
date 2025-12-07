@@ -139,6 +139,7 @@ class ScheduledSyncTaskForm(forms.ModelForm):
         fields = [
             'name',
             'sync_mode',
+            'execution_mode',
             'selected_networks',
             'sync_organizations',
             'sync_sites',
@@ -153,6 +154,7 @@ class ScheduledSyncTaskForm(forms.ModelForm):
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'My Daily Sync'}),
             'sync_mode': forms.Select(attrs={'class': 'form-select'}),
+            'execution_mode': forms.Select(attrs={'class': 'form-select'}),
             'selected_networks': forms.HiddenInput(),
             'sync_organizations': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'sync_sites': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -170,6 +172,7 @@ class ScheduledSyncTaskForm(forms.ModelForm):
         help_texts = {
             'name': 'A descriptive name for this scheduled task',
             'sync_mode': 'Choose whether to sync all networks or select specific ones',
+            'execution_mode': 'Auto applies changes immediately, Review stages for approval, Dry Run only previews',
             'frequency': 'How often should this task run',
             'scheduled_datetime': 'When should this task first run (and repeat based on frequency)',
         }

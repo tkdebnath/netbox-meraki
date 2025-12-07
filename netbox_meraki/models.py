@@ -905,6 +905,17 @@ class ScheduledSyncTask(models.Model):
         help_text='Type of sync to perform'
     )
     
+    execution_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('auto', 'Auto Sync'),
+            ('review', 'Sync with Review'),
+            ('dry_run', 'Dry Run'),
+        ],
+        default='review',
+        help_text='How to execute the sync: auto applies immediately, review requires approval, dry_run only previews'
+    )
+    
     selected_networks = models.JSONField(
         default=list,
         blank=True,

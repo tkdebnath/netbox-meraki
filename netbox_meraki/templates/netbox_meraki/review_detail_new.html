@@ -231,15 +231,11 @@
                                     </thead>
                                     <tbody>
                                         {% for key, value in item.proposed_data.items %}
-                                        {% with current_value=item.current_data|default_if_none:dict %}
-                                        {% if current_value|length > 0 and key in current_value and current_value|lookup:key != value or current_value|length == 0 %}
                                         <tr>
                                             <td><strong>{{ key }}</strong></td>
-                                            <td><code>{% if current_value and key in current_value %}{{ current_value|lookup:key }}{% endif %}</code></td>
+                                            <td><code>{% if item.current_data and key in item.current_data %}{{ item.current_data|lookup:key }}{% endif %}</code></td>
                                             <td><code class="text-success">{{ value }}</code></td>
                                         </tr>
-                                        {% endif %}
-                                        {% endwith %}
                                         {% endfor %}
                                     </tbody>
                                 </table>
