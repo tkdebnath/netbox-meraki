@@ -18,8 +18,11 @@ except ImportError:
         system_job = None
         JobIntervalChoices = None
 
-# Always available in extras.jobs
-from extras.jobs import JobButtonReceiver
+# JobButtonReceiver may not exist in all versions, try to import it
+try:
+    from extras.jobs import JobButtonReceiver
+except ImportError:
+    JobButtonReceiver = None
 
 from .sync_service import MerakiSyncService
 from .models import PluginSettings, ScheduledSyncTask
