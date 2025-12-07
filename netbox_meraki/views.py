@@ -174,6 +174,12 @@ class ConfigView(LoginRequiredMixin, View):
     def post(self, request):
         settings_instance = PluginSettings.get_settings()
         
+        # Debug: Log ALL POST data to see what's being submitted
+        logger.info(f"=== FULL POST DATA ===")
+        for key, value in request.POST.items():
+            logger.info(f"  {key}: {value}")
+        logger.info(f"======================")
+        
         # Debug: Log incoming POST data for device roles
         logger.info(f"POST data received - MX: {request.POST.get('mx_device_role')}, MS: {request.POST.get('ms_device_role')}, MR: {request.POST.get('mr_device_role')}")
         logger.info(f"Current DB values - MX: {settings_instance.mx_device_role}, MS: {settings_instance.ms_device_role}")

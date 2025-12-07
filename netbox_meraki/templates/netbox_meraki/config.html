@@ -38,6 +38,12 @@
                 </li>
             </ul>
             
+            <!-- Hidden fields for values not displayed in tabs but required by form -->
+            {{ form.sync_mode.as_hidden }}
+            {{ form.sync_interval_minutes.as_hidden }}
+            {{ form.scheduled_sync_mode.as_hidden }}
+            {{ form.enable_scheduled_sync.as_hidden }}
+            
             <div class="tab-content mt-3">
                 <!-- Device Role Mappings Tab -->
                 <div class="tab-pane fade show active" id="device-roles" role="tabpanel">
