@@ -46,6 +46,14 @@
                                 {% else %}
                                     Single Network
                                 {% endif %}
+                                •
+                                {% if task.execution_mode == 'auto' %}
+                                    Auto
+                                {% elif task.execution_mode == 'review' %}
+                                    Review
+                                {% else %}
+                                    Dry Run
+                                {% endif %}
                             </small>
                         </td>
                         <td>
@@ -190,6 +198,14 @@
                         </label>
                         {{ form.sync_mode }}
                         <small class="form-text text-muted">{{ form.sync_mode.help_text }}</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.execution_mode.id_for_label }}" class="form-label">
+                            <strong>Execution Mode</strong> <span class="text-danger">*</span>
+                        </label>
+                        {{ form.execution_mode }}
+                        <small class="form-text text-muted">{{ form.execution_mode.help_text }}</small>
                     </div>
                     
                     <div id="networkSelection" style="display:none;">
