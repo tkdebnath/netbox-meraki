@@ -52,8 +52,18 @@ class MerakiSyncService:
         self._ensure_custom_fields()
     
     def _ensure_custom_fields(self):
-        """Ensure required custom fields exist"""
+        """Ensure required custom fields exist and remove old ones"""
         device_ct = ContentType.objects.get_for_model(Device)
+        
+        # Remove old custom fields if they exist
+        old_fields = ['meraki_firmware', 'meraki_mac_address']
+        for old_field_name in old_fields:
+            try:
+                old_field = CustomField.objects.get(name=old_field_name)
+                old_field.delete()
+                logger.info(f"Removed deprecated custom field: {old_field_name}")
+            except CustomField.DoesNotExist:
+                pass  # Already removed or never existed
         
         firmware_field, created = CustomField.objects.get_or_create(
             name='software_version',
@@ -1553,6 +1563,82 @@ class MerakiSyncService:
                         'color': role_color
                     }
                 )
+                
+                # Check if we're updating an existing device by serial
+                try:
+                    existing_device = Device.objects.get(serial=data['serial'])
+                    # Device exists with this serial, we'll update it
+                    # But check if the new name conflicts with a DIFFERENT device
+                    if existing_device.name != data['name']:
+                        # Name is changing, check if new name is taken by another device
+                        conflicting_device = Device.objects.filter(
+                            name=data['name'],
+                            site=site
+                        ).exclude(serial=data['serial']).first()
+                        
+                        if conflicting_device:
+                            # Name conflict exists - determine which device to rename
+                            current_device_status = data.get('status', 'active')
+                            
+                            if conflicting_device.status != 'active' and current_device_status == 'active':
+                                # Rename the conflicting device (it's not active)
+                                conflicting_device.name = f"{conflicting_device.name}-{conflicting_device.serial[-4:]}"
+                                conflicting_device.save()
+                                logger.warning(
+                                    f"Renamed inactive device {conflicting_device.serial} to '{conflicting_device.name}' "
+                                    f"to make room for active device {data['serial']}"
+                                )
+                            elif current_device_status != 'active' and conflicting_device.status == 'active':
+                                # Current device is not active, rename it instead
+                                original_name = data['name']
+                                data['name'] = f"{data['name']}-{data['serial'][-4:]}"
+                                logger.warning(
+                                    f"Renamed inactive device {data['serial']} to '{data['name']}' "
+                                    f"due to conflict with active device"
+                                )
+                            else:
+                                # Both active or both inactive - add CONFLICT suffix to current (latest)
+                                original_name = data['name']
+                                data['name'] = f"{data['name']}-CONFLICT"
+                                logger.warning(
+                                    f"Name conflict: both devices have same status. "
+                                    f"Renamed latest device {data['serial']} to '{data['name']}'"
+                                )
+                except Device.DoesNotExist:
+                    # New device, check if name is already taken
+                    conflicting_device = Device.objects.filter(
+                        name=data['name'],
+                        site=site
+                    ).first()
+                    
+                    if conflicting_device:
+                        # Name conflict - check statuses
+                        current_device_status = data.get('status', 'active')
+                        
+                        if conflicting_device.status != 'active' and current_device_status == 'active':
+                            # Rename the existing inactive device
+                            conflicting_device.name = f"{conflicting_device.name}-{conflicting_device.serial[-4:]}"
+                            conflicting_device.save()
+                            logger.warning(
+                                f"Renamed existing inactive device {conflicting_device.serial} to '{conflicting_device.name}' "
+                                f"to make room for new active device {data['serial']}"
+                            )
+                        elif current_device_status != 'active' and conflicting_device.status == 'active':
+                            # New device is not active, rename it
+                            original_name = data['name']
+                            data['name'] = f"{data['name']}-{data['serial'][-4:]}"
+                            logger.warning(
+                                f"Renamed new inactive device {data['serial']} to '{data['name']}' "
+                                f"due to conflict with active device"
+                            )
+                        else:
+                            # Both active or both inactive - add CONFLICT suffix to new (latest)
+                            original_name = data['name']
+                            data['name'] = f"{data['name']}-CONFLICT"
+                            logger.warning(
+                                f"Name conflict: both devices have same status. "
+                                f"Created latest device {data['serial']} as '{data['name']}'"
+                            )
                 
                 device, created = Device.objects.update_or_create(
                     serial=data['serial'],

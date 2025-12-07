@@ -44,14 +44,14 @@
                         <tr>
                             <th>Progress:</th>
                             <td>
-                                <div class="progress">
-                                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                <div class="progress" style="background-color: var(--bs-gray-300); height: 25px;">
+                                    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
                                          role="progressbar" 
-                                         style="width: {{ sync_log.progress_percent }}%"
+                                         style="width: {{ sync_log.progress_percent }}%; font-weight: 600; color: #000;"
                                          aria-valuenow="{{ sync_log.progress_percent }}" 
                                          aria-valuemin="0" 
                                          aria-valuemax="100">
-                                        <span id="progress-text">{{ sync_log.progress_percent }}%</span>
+                                        <span id="progress-text" style="color: #000; text-shadow: 0 0 3px rgba(255,255,255,0.8);">{{ sync_log.progress_percent }}%</span>
                                     </div>
                                 </div>
                             </td>
@@ -212,18 +212,18 @@
                 </div>
             </div>
             <div class="card-body">
-                <div id="progress-logs" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9em; background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
+                <div id="progress-logs" class="bg-body-secondary" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9em; padding: 15px; border-radius: 4px; color: var(--bs-body-color);">
                     {% for log in sync_log.progress_logs %}
-                    <div class="log-entry">
-                        <span class="text-muted">[{{ log.timestamp|slice:":19" }}]</span>
+                    <div class="log-entry" style="margin-bottom: 4px; color: var(--bs-body-color);">
+                        <span class="text-muted" style="opacity: 0.7;">[{{ log.timestamp|slice:":19" }}]</span>
                         {% if log.level == 'error' %}
-                            <span class="badge bg-danger">ERROR</span>
+                            <span class="badge bg-danger" style="color: #fff;">ERROR</span>
                         {% elif log.level == 'warning' %}
-                            <span class="badge bg-warning">WARN</span>
+                            <span class="badge bg-warning" style="color: #000;">WARN</span>
                         {% else %}
-                            <span class="badge bg-info">INFO</span>
+                            <span class="badge bg-info" style="color: #fff;">INFO</span>
                         {% endif %}
-                        <span>{{ log.message }}</span>
+                        <span style="color: var(--bs-body-color);">{{ log.message }}</span>
                     </div>
                     {% endfor %}
                 </div>
@@ -325,15 +325,17 @@ function fetchProgress() {
                     data.progress_logs.forEach(log => {
                         const logEntry = document.createElement('div');
                         logEntry.className = 'log-entry';
+                        logEntry.style.marginBottom = '4px';
+                        logEntry.style.color = 'var(--bs-body-color)';
                         
                         const timestamp = log.timestamp.substring(0, 19);
                         const levelBadge = log.level === 'error' ? 
-                            '<span class="badge bg-danger">ERROR</span>' :
+                            '<span class="badge bg-danger" style="color: #fff;">ERROR</span>' :
                             log.level === 'warning' ?
-                            '<span class="badge bg-warning">WARN</span>' :
-                            '<span class="badge bg-info">INFO</span>';
+                            '<span class="badge bg-warning" style="color: #000;">WARN</span>' :
+                            '<span class="badge bg-info" style="color: #fff;">INFO</span>';
                         
-                        logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${levelBadge} <span>${log.message}</span>`;
+                        logEntry.innerHTML = `<span class="text-muted" style="opacity: 0.7;">[${timestamp}]</span> ${levelBadge} <span style="color: var(--bs-body-color);">${log.message}</span>`;
                         logsContainer.appendChild(logEntry);
                     });
                     // Auto-scroll to bottom if enabled
