@@ -3,62 +3,48 @@
 
 {% block content %}
 <style>
-    .meraki-plugin-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    .plugin-author-bar {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
+        gap: 15px;
+        margin-bottom: 15px;
+        padding: 8px 0;
+        border-bottom: 1px solid #e0e0e0;
     }
-    .meraki-plugin-header h2 {
-        margin: 0;
-        font-size: 1.5rem;
-        font-weight: 600;
-    }
-    .meraki-plugin-author {
+    .plugin-author {
         font-size: 0.9rem;
-        opacity: 0.95;
-        margin-top: 5px;
+        color: #666;
     }
-    .meraki-plugin-author strong {
-        font-size: 1.1rem;
-        font-weight: 700;
+    .plugin-author strong {
+        font-weight: 600;
+        color: #333;
     }
     .github-link {
         display: flex;
         align-items: center;
-        gap: 8px;
-        color: white;
+        gap: 6px;
+        color: #333;
         text-decoration: none;
-        background: rgba(255,255,255,0.15);
-        padding: 8px 15px;
-        border-radius: 6px;
-        transition: all 0.3s ease;
+        padding: 4px 10px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        border: 1px solid #ddd;
     }
     .github-link:hover {
-        background: rgba(255,255,255,0.25);
-        color: white;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        background: #f5f5f5;
+        color: #000;
+        border-color: #999;
     }
     .github-logo {
-        width: 28px;
-        height: 28px;
+        width: 18px;
+        height: 18px;
         fill: currentColor;
     }
 </style>
 
-<div class="meraki-plugin-header">
-    <div>
-        <h2>🌐 NetBox Meraki Sync Plugin</h2>
-        <div class="meraki-plugin-author">
-            Developed by <strong>Tarani Debnath</strong>
-        </div>
-    </div>
+<div class="plugin-author-bar">
+    <span class="plugin-author">by <strong>Tarani Debnath</strong></span>
     <a href="https://github.com/tkdebnath/netbox-meraki" target="_blank" class="github-link" title="View on GitHub">
         <svg class="github-logo" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 0.297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
