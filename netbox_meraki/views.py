@@ -174,6 +174,10 @@ class ConfigView(LoginRequiredMixin, View):
     def post(self, request):
         settings_instance = PluginSettings.get_settings()
         
+        # Debug: Log incoming POST data for device roles
+        logger.info(f"POST data received - MX: {request.POST.get('mx_device_role')}, MS: {request.POST.get('ms_device_role')}, MR: {request.POST.get('mr_device_role')}")
+        logger.info(f"Current DB values - MX: {settings_instance.mx_device_role}, MS: {settings_instance.ms_device_role}")
+        
         # Handle checkbox fields explicitly - unchecked checkboxes don't send data
         # Django forms expect 'false' string or absence for False boolean values
         post_data = request.POST.copy()
@@ -198,9 +202,18 @@ class ConfigView(LoginRequiredMixin, View):
         form = PluginSettingsForm(post_data, instance=settings_instance)
         
         if form.is_valid():
-            form.save()
+            saved_instance = form.save()
+            # Debug: Log what was actually saved
+            logger.info(f"Settings saved - MX Role: {saved_instance.mx_device_role}, MS Role: {saved_instance.ms_device_role}")
+            # Verify it was actually persisted
+            reloaded = PluginSettings.get_settings()
+            logger.info(f"Settings reloaded from DB - MX Role: {reloaded.mx_device_role}, MS Role: {reloaded.ms_device_role}")
             messages.success(request, 'Settings updated successfully.')
             return redirect('plugins:netbox_meraki:config')
+        else:
+            # Debug: Log form errors
+            logger.error(f"Form validation failed: {form.errors}")
+            messages.error(request, 'Failed to save settings. Please check the form for errors.')
         
         site_rules = SiteNameRule.objects.all()
         prefix_filter_rules = PrefixFilterRule.objects.all()
