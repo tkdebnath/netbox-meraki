@@ -345,22 +345,26 @@ class MerakiSyncService:
             model = device.get('model', '')
             product_type = device.get('productType', '')
             
+            # Always merge status info first from device_status_map if available
+            if serial and serial in device_status_map:
+                status_info = device_status_map[serial]
+                # Merge status info (online/offline/dormant/alerting)
+                if 'status' in status_info:
+                    device['status'] = status_info['status']
+                if 'publicIp' in status_info:
+                    device['publicIp'] = status_info['publicIp']
+            
             # Try to get detailed firmware version from network firmware upgrades API first
             if product_type and product_type in firmware_info_map:
                 device['firmware'] = firmware_info_map[product_type]
                 firmware_count += 1
                 logger.debug(f"Set firmware for {serial} from firmware upgrades API: {firmware_info_map[product_type]}")
             elif serial and serial in device_status_map:
-                # Fallback to device status API
+                # Fallback to device status API for firmware
                 status_info = device_status_map[serial]
                 if 'firmware' in status_info and status_info['firmware']:
                     device['firmware'] = status_info['firmware']
                     firmware_count += 1
-                # Also merge other useful status info
-                if 'status' in status_info:
-                    device['status'] = status_info['status']
-                if 'publicIp' in status_info:
-                    device['publicIp'] = status_info['publicIp']
         
         if firmware_count > 0:
             logger.info(f"Merged firmware info for {firmware_count}/{len(devices)} devices in {network_name}")
@@ -533,6 +537,20 @@ class MerakiSyncService:
         if firmware_version and firmware_version != 'Unknown':
             logger.debug(f"Device {name} firmware: {firmware_version}")
         
+        # Map Meraki device status to NetBox status
+        # Meraki statuses: online, offline, alerting, dormant
+        meraki_status = device.get('status', '').lower()
+        netbox_status = 'active'  # Default to active
+        
+        if meraki_status == 'offline':
+            netbox_status = 'offline'
+        elif meraki_status == 'dormant':
+            netbox_status = 'offline'  # Dormant devices are essentially offline
+        elif meraki_status in ['online', 'alerting']:
+            netbox_status = 'active'  # Online or alerting devices are active
+        
+        logger.debug(f"Device {name} status: Meraki={meraki_status}, NetBox={netbox_status}")
+        
         proposed_data = {
             'name': name,
             'serial': serial,
@@ -540,7 +558,7 @@ class MerakiSyncService:
             'manufacturer': 'Cisco Meraki',
             'role': role_name,
             'site': site_name,
-            'status': 'active' if device.get('status') != 'offline' else 'offline',
+            'status': netbox_status,
             'product_type': product_type,
             'mac': device.get('mac', 'N/A'),
             'lan_ip': device.get('lanIp', 'N/A'),
