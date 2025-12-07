@@ -151,6 +151,7 @@ if system_job is not None:
         class Meta:
             name = "Execute Scheduled Sync Tasks"
             description = "Check for and execute all scheduled sync tasks that are due"
+            hidden = True
         
         def run(self, *args, **kwargs):
             """Find and execute all tasks that are due to run"""
@@ -194,35 +195,17 @@ if system_job is not None:
                 # Initialize sync service
                 sync_service = MerakiSyncService()
                 
-                # Prepare sync options
-                sync_options = {
-                    'sync_organizations': task.sync_organizations,
-                    'sync_sites': task.sync_sites,
-                    'sync_devices': task.sync_devices,
-                    'sync_vlans': task.sync_vlans,
-                    'sync_prefixes': task.sync_prefixes,
-                    'cleanup_orphaned': task.cleanup_orphaned,
-                }
-                
-                # Execute sync based on mode
+                # Execute sync based on mode - sync_all handles all modes via network_ids parameter
                 if task.sync_mode == 'full':
-                    sync_log = sync_service.sync(**sync_options)
+                    sync_log = sync_service.sync_all()
                 
                 elif task.sync_mode == 'selective':
-                    sync_log = sync_service.sync_selective_networks(
-                        network_ids=task.selected_networks,
-                        **sync_options
-                    )
+                    sync_log = sync_service.sync_all(network_ids=task.selected_networks)
                 
                 elif task.sync_mode == 'single_network':
                     if not task.selected_networks:
                         raise ValueError('No network selected for single network sync')
-                    
-                    network_id = task.selected_networks[0]
-                    sync_log = sync_service.sync_single_network(
-                        network_id=network_id,
-                        **sync_options
-                    )
+                    sync_log = sync_service.sync_all(network_ids=[task.selected_networks[0]])
                 
                 else:
                     raise ValueError(f'Invalid sync mode: {task.sync_mode}')
@@ -306,6 +289,7 @@ else:
             commit_default = True
             scheduling_enabled = True
             task_queues = ['default']
+            hidden = True
         
         def run(self, *args, **kwargs):
             """Find and execute all tasks that are due to run"""
@@ -349,35 +333,17 @@ else:
                 # Initialize sync service
                 sync_service = MerakiSyncService()
                 
-                # Prepare sync options
-                sync_options = {
-                    'sync_organizations': task.sync_organizations,
-                    'sync_sites': task.sync_sites,
-                    'sync_devices': task.sync_devices,
-                    'sync_vlans': task.sync_vlans,
-                    'sync_prefixes': task.sync_prefixes,
-                    'cleanup_orphaned': task.cleanup_orphaned,
-                }
-                
-                # Execute sync based on mode
+                # Execute sync based on mode - sync_all handles all modes via network_ids parameter
                 if task.sync_mode == 'full':
-                    sync_log = sync_service.sync(**sync_options)
+                    sync_log = sync_service.sync_all()
                 
                 elif task.sync_mode == 'selective':
-                    sync_log = sync_service.sync_selective_networks(
-                        network_ids=task.selected_networks,
-                        **sync_options
-                    )
+                    sync_log = sync_service.sync_all(network_ids=task.selected_networks)
                 
                 elif task.sync_mode == 'single_network':
                     if not task.selected_networks:
                         raise ValueError('No network selected for single network sync')
-                    
-                    network_id = task.selected_networks[0]
-                    sync_log = sync_service.sync_single_network(
-                        network_id=network_id,
-                        **sync_options
-                    )
+                    sync_log = sync_service.sync_all(network_ids=[task.selected_networks[0]])
                 
                 else:
                     raise ValueError(f'Invalid sync mode: {task.sync_mode}')
