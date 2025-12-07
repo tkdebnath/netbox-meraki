@@ -2,6 +2,109 @@
 {% load static %}
 
 {% block page_content %}
+<style>
+    /* Improve readability with larger fonts and better contrast for both light and dark modes */
+    .scheduled-tasks-table {
+        font-size: 1.1rem;
+        background-color: var(--bs-body-bg);
+    }
+    .scheduled-tasks-table th {
+        font-size: 1.15rem;
+        font-weight: 600;
+        background-color: var(--bs-table-bg);
+        color: var(--bs-body-color);
+        padding: 1rem 0.75rem;
+        border-bottom: 2px solid var(--bs-border-color);
+    }
+    .scheduled-tasks-table td {
+        padding: 1rem 0.75rem;
+        vertical-align: middle;
+        color: var(--bs-body-color);
+        background-color: var(--bs-body-bg);
+    }
+    .scheduled-tasks-table tbody tr {
+        background-color: var(--bs-body-bg);
+    }
+    .scheduled-tasks-table tbody tr:hover {
+        background-color: var(--bs-table-hover-bg);
+    }
+    .scheduled-tasks-table strong {
+        font-size: 1.2rem;
+        color: var(--bs-emphasis-color);
+        font-weight: 700;
+    }
+    .scheduled-tasks-table .badge {
+        font-size: 1rem;
+        padding: 0.5em 0.8em;
+        font-weight: 600;
+    }
+    .scheduled-tasks-table .text-muted {
+        color: var(--bs-secondary-color) !important;
+        font-size: 0.95rem;
+    }
+    .scheduled-tasks-table .btn {
+        font-size: 1.1rem;
+        padding: 0.5rem 0.75rem;
+    }
+    /* Status badges with high contrast colors */
+    .badge.bg-secondary {
+        background-color: #6c757d !important;
+        color: white !important;
+        border: 1px solid #5a6268;
+    }
+    .badge.bg-primary {
+        background-color: #0d6efd !important;
+        color: white !important;
+        border: 1px solid #0a58ca;
+    }
+    .badge.bg-success {
+        background-color: #198754 !important;
+        color: white !important;
+        border: 1px solid #146c43;
+    }
+    .badge.bg-danger {
+        background-color: #dc3545 !important;
+        color: white !important;
+        border: 1px solid #b02a37;
+    }
+    .badge.bg-warning {
+        background-color: #ffc107 !important;
+        color: #000 !important;
+        border: 1px solid #ffca2c;
+        font-weight: 700;
+    }
+    .badge.bg-info {
+        background-color: #0dcaf0 !important;
+        color: #000 !important;
+        border: 1px solid #31d2f2;
+        font-weight: 700;
+    }
+    /* Make dates and numbers more visible */
+    .scheduled-tasks-table td:nth-child(2),
+    .scheduled-tasks-table td:nth-child(3),
+    .scheduled-tasks-table td:nth-child(4),
+    .scheduled-tasks-table td:nth-child(6) {
+        font-weight: 600;
+        color: var(--bs-emphasis-color);
+    }
+    /* Error messages */
+    .error-row {
+        font-size: 1rem;
+        padding: 0.75rem;
+        background-color: rgba(220, 53, 69, 0.2) !important;
+        color: var(--bs-danger-text) !important;
+        font-weight: 600;
+    }
+    /* Table borders */
+    .scheduled-tasks-table {
+        border: 1px solid var(--bs-border-color);
+    }
+    .scheduled-tasks-table td,
+    .scheduled-tasks-table th {
+        border: 1px solid var(--bs-border-color);
+    }
+</style>
+
 <div class="row">
     <div class="col-md-12">
         <h1>Scheduled Sync Tasks</h1>
@@ -20,7 +123,7 @@
         
         {% if tasks %}
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover table-bordered scheduled-tasks-table">
                 <thead>
                     <tr>
                         <th>Name</th>
@@ -61,7 +164,7 @@
                         </td>
                         <td>
                             {% if task.next_run %}
-                                {{ task.next_run|date:"Y-m-d H:i" }}
+                                <strong>{{ task.next_run|date:"Y-m-d H:i" }}</strong>
                             {% else %}
                                 <span class="text-muted">Not scheduled</span>
                             {% endif %}
@@ -88,8 +191,8 @@
                         </td>
                         <td>
                             {% if task.total_runs > 0 %}
-                                {{ task.successful_runs }} / {{ task.total_runs }}
-                                ({{ task.successful_runs|floatformat:0 }}%)
+                                <strong>{{ task.successful_runs }} / {{ task.total_runs }}</strong>
+                                <br><small>({{ task.successful_runs|floatformat:0 }}%)</small>
                             {% else %}
                                 <span class="text-muted">N/A</span>
                             {% endif %}
@@ -131,8 +234,8 @@
                     </tr>
                     {% if task.status == 'failed' and task.last_error %}
                     <tr>
-                        <td colspan="8" class="bg-danger bg-opacity-10">
-                            <small><strong>Last Error:</strong> {{ task.last_error }}</small>
+                        <td colspan="8" class="error-row">
+                            <strong>Last Error:</strong> {{ task.last_error }}
                         </td>
                     </tr>
                     {% endif %}
