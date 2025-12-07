@@ -33,6 +33,7 @@ class MerakiSyncService:
         self.stats = {
             'organizations': 0,
             'networks': 0,
+            'sites': 0,
             'devices': 0,
             'vlans': 0,
             'prefixes': 0,
@@ -237,6 +238,11 @@ class MerakiSyncService:
             self.sync_log.updated_prefixes = self.stats.get('updated_prefixes', 0)
             self.sync_log.errors = self.errors
             self.sync_log.duration_seconds = duration
+            
+            # Log sites stat for debugging (field may not exist in DB yet)
+            if self.stats.get('sites', 0) > 0:
+                logger.info(f"Synced {self.stats['sites']} sites")
+            
             self.sync_log.save()
             
             # Update review stats
