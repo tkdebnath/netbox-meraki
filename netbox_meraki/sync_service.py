@@ -91,6 +91,23 @@ class MerakiSyncService:
             logger.info("Created custom field: meraki_ssids")
         elif device_ct not in ssid_field.object_types.all():
             ssid_field.object_types.add(device_ct)
+        
+        # Create MAC address custom field
+        mac_field, created = CustomField.objects.get_or_create(
+            name='meraki_mac_address',
+            defaults={
+                'label': 'MAC Address',
+                'type': 'text',
+                'description': 'Device MAC address from Meraki',
+                'weight': 102,
+            }
+        )
+        if created:
+            # NetBox 4.x uses object_types instead of content_types
+            mac_field.object_types.set([device_ct])
+            logger.info("Created custom field: meraki_mac_address")
+        elif device_ct not in mac_field.object_types.all():
+            mac_field.object_types.add(device_ct)
     
     def _cleanup_old_review_items(self):
         """Clean up old review items and completed reviews before starting new sync"""
@@ -533,6 +550,7 @@ class MerakiSyncService:
             'custom_field_data': {
                 'meraki_firmware': firmware_version if firmware_version != 'Unknown' else '',
                 'meraki_network_id': device.get('networkId', ''),
+                'meraki_mac_address': device.get('mac', ''),
             }
         }
         
@@ -588,6 +606,16 @@ class MerakiSyncService:
                         logger.info(f"✓ Synced SSIDs for {name}")
                     except Exception as e:
                         logger.warning(f"Could not sync SSIDs for {name}: {e}")
+                
+                # For MX devices, create SVI interfaces for VLANs
+                if product_type.startswith('MX'):
+                    try:
+                        network_id = device.get('networkId')
+                        if network_id:
+                            self._create_mx_svi_interfaces(device_obj, network_id)
+                            logger.info(f"✓ Created SVI interfaces for {name}")
+                    except Exception as e:
+                        logger.warning(f"Could not create SVI interfaces for {name}: {e}")
             except Exception as e:
                 review_item.status = 'failed'
                 review_item.error_message = str(e)
@@ -676,6 +704,65 @@ class MerakiSyncService:
                 logger.debug(f"Could not fetch SSIDs for AP {device.name}: {e}")
         except Exception as e:
             logger.warning(f"Error syncing SSIDs for device {device.name}: {e}")
+    
+    def _create_mx_svi_interfaces(self, device: Device, network_id: str):
+        """Create SVI (VLAN) interfaces on MX device"""
+        try:
+            # Get VLANs for this network
+            vlans = self.client.get_appliance_vlans(network_id)
+            if not vlans:
+                return
+            
+            for vlan_data in vlans:
+                vlan_id = vlan_data.get('id')
+                vlan_name = vlan_data.get('name', f"VLAN {vlan_id}")
+                vlan_subnet = vlan_data.get('subnet')
+                appliance_ip = vlan_data.get('applianceIp')
+                
+                if not vlan_id:
+                    continue
+                
+                # Create or get the VLAN interface (SVI)
+                interface_name = f"vlan{vlan_id}"
+                interface, created = Interface.objects.get_or_create(
+                    device=device,
+                    name=interface_name,
+                    defaults={
+                        'type': 'virtual',
+                        'description': f"{vlan_name} - {vlan_subnet if vlan_subnet else 'N/A'}",
+                        'enabled': True,
+                    }
+                )
+                
+                if created:
+                    logger.info(f"✓ Created SVI interface {interface_name} on {device.name}")
+                
+                # If there's an appliance IP, assign it to the interface
+                if appliance_ip:
+                    # Determine IP with CIDR if subnet is available
+                    if vlan_subnet and '/' in vlan_subnet:
+                        # Extract prefix length from subnet
+                        prefix_length = vlan_subnet.split('/')[1]
+                        ip_address_str = f"{appliance_ip}/{prefix_length}"
+                    else:
+                        ip_address_str = f"{appliance_ip}/24"  # Default to /24
+                    
+                    ip_address, ip_created = IPAddress.objects.get_or_create(
+                        address=ip_address_str,
+                        defaults={
+                            'description': f'{vlan_name} SVI on {device.name}',
+                            'status': 'active',
+                        }
+                    )
+                    
+                    # Assign IP to interface
+                    if not ip_address.assigned_object:
+                        ip_address.assigned_object = interface
+                        ip_address.save()
+                        logger.info(f"✓ Assigned IP {appliance_ip} to {interface_name} on {device.name}")
+                        
+        except Exception as e:
+            logger.error(f"Error creating SVI interfaces for {device.name}: {e}")
     
     def _create_wan_interface_and_ip(self, device_serial: str, device_name: str, wan_ip: str, raw_wan_ip: str):
         """Create WAN interface and assign IP address for MX devices in auto mode"""
