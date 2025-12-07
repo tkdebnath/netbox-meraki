@@ -1,0 +1,53 @@
+{% extends 'base/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Delete Prefix Filter Rule</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <strong>Confirm Deletion</strong>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning">
+                    <i class="mdi mdi-alert"></i>
+                    Are you sure you want to delete the prefix filter rule <strong>{{ object.name }}</strong>?
+                </div>
+                
+                <div class="mb-3">
+                    <strong>Rule Details:</strong>
+                    <ul>
+                        <li><strong>Name:</strong> {{ object.name }}</li>
+                        <li><strong>Type:</strong> {{ object.get_filter_type_display }}</li>
+                        <li><strong>Priority:</strong> {{ object.priority }}</li>
+                        {% if object.prefix_pattern %}
+                        <li><strong>Pattern:</strong> <code>{{ object.prefix_pattern }}</code></li>
+                        {% endif %}
+                        <li><strong>Length Filter:</strong> {{ object.get_prefix_length_filter_display }}</li>
+                        {% if object.description %}
+                        <li><strong>Description:</strong> {{ object.description }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="mdi mdi-delete"></i> Yes, Delete
+                        </button>
+                        <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary">
+                            <i class="mdi mdi-cancel"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends 'base/layout.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Prefix Filter Rules</h1>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>All Prefix Filter Rules</strong>
+                <a href="{% url 'plugins:netbox_meraki:prefixfilterrule_add' %}" class="btn btn-success">
+                    <i class="mdi mdi-plus"></i> Add Filter Rule
+                </a>
+            </div>
+            <div class="card-body">
+                {% if rules %}
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Priority</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Pattern</th>
+                                <th>Length Filter</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                                <tr>
+                                    <td>{{ rule.priority }}</td>
+                                    <td><strong>{{ rule.name }}</strong></td>
+                                    <td>
+                                        {% if rule.filter_type == 'exclude' %}
+                                            <span class="badge bg-danger">Exclude</span>
+                                        {% else %}
+                                            <span class="badge bg-success">Include Only</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if rule.prefix_pattern %}
+                                            <code>{{ rule.prefix_pattern }}</code>
+                                        {% else %}
+                                            <em>All prefixes</em>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ rule.get_prefix_length_filter_display }}
+                                        {% if rule.min_prefix_length %}
+                                            ({{ rule.min_prefix_length }}
+                                            {% if rule.max_prefix_length and rule.prefix_length_filter == 'range' %}
+                                                - {{ rule.max_prefix_length }}
+                                            {% endif %}
+                                            )
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if rule.enabled %}
+                                            <span class="badge bg-success">Enabled</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Disabled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'plugins:netbox_meraki:prefixfilterrule_edit' pk=rule.pk %}" class="btn btn-sm btn-warning">
+                                            <i class="mdi mdi-pencil"></i> Edit
+                                        </a>
+                                        <a href="{% url 'plugins:netbox_meraki:prefixfilterrule_delete' pk=rule.pk %}" class="btn btn-sm btn-danger">
+                                            <i class="mdi mdi-delete"></i> Delete
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <div class="alert alert-info">
+                        No prefix filter rules configured. All prefixes will be synced from Meraki.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary">
+            <i class="mdi mdi-arrow-left"></i> Back to Configuration
+        </a>
+    </div>
+</div>
+{% endblock %}
