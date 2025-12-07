@@ -908,6 +908,7 @@ class ScheduledSyncTask(models.Model):
     selected_networks = models.JSONField(
         default=list,
         blank=True,
+        null=True,
         help_text='List of network IDs for selective/single network sync'
     )
     
