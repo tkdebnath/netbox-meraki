@@ -3,6 +3,8 @@ Background jobs for NetBox Meraki plugin using NetBox's job system
 """
 from extras.jobs import Job, JobButtonReceiver
 from django.utils import timezone
+from netbox.jobs import system_job, JobRunner
+from core.choices import JobIntervalChoices
 from .sync_service import MerakiSyncService
 from .models import PluginSettings, ScheduledSyncTask
 
@@ -109,18 +111,15 @@ class ScheduledMerakiSyncJob(Job):
             raise
 
 
-class ExecuteScheduledTasksJob(Job):
+@system_job(interval=1)  # Check every minute for more precise scheduling
+class ExecuteScheduledTasksJob(JobRunner):
     """
     Execute all due scheduled sync tasks
-    This job should be scheduled to run frequently (e.g., every 5-10 minutes)
+    This system job runs automatically every minute to check for and execute scheduled tasks
     """
     class Meta:
         name = "Execute Scheduled Sync Tasks"
         description = "Check for and execute all scheduled sync tasks that are due"
-        commit_default = True
-        scheduling_enabled = True
-        task_queues = ['default']
-        hidden = False
     
     def run(self, *args, **kwargs):
         """Find and execute all tasks that are due to run"""
