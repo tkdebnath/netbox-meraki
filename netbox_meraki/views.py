@@ -402,3 +402,44 @@ class ReviewListView(LoginRequiredMixin, ListView):
     context_object_name = 'reviews'
     paginate_by = 50
     ordering = ['-created']
+
+
+# API Views for live sync progress
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+
+
+class SyncProgressAPIView(LoginRequiredMixin, View):
+    """API endpoint to get sync progress"""
+    
+    def get(self, request, pk):
+        sync_log = get_object_or_404(SyncLog, pk=pk)
+        
+        data = {
+            'status': sync_log.status,
+            'progress_percent': sync_log.progress_percent or 0,
+            'current_operation': sync_log.current_operation or '',
+            'progress_logs': sync_log.progress_logs or [],
+        }
+        
+        return JsonResponse(data)
+
+
+class SyncCancelAPIView(LoginRequiredMixin, View):
+    """API endpoint to cancel a running sync"""
+    
+    @method_decorator(csrf_exempt)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+    
+    def post(self, request, pk):
+        sync_log = get_object_or_404(SyncLog, pk=pk)
+        
+        if sync_log.status == 'running':
+            sync_log.cancel_requested = True
+            sync_log.save()
+            return JsonResponse({'status': 'success', 'message': 'Cancellation requested'})
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Sync is not running'}, status=400)

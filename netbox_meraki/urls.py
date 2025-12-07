@@ -22,4 +22,8 @@ urlpatterns = [
     path('review/<int:pk>/', views.ReviewDetailView.as_view(), name='review_detail'),
     path('review/<int:pk>/item/<int:item_pk>/action/', views.ReviewItemActionView.as_view(), name='review_item_action'),
     path('review/<int:pk>/item/<int:item_pk>/edit/', views.ReviewItemEditView.as_view(), name='review_item_edit'),
+    
+    # API endpoints for live sync progress
+    path('api/sync/<int:pk>/progress/', views.SyncProgressAPIView.as_view(), name='sync_progress_api'),
+    path('api/sync/<int:pk>/cancel/', views.SyncCancelAPIView.as_view(), name='sync_cancel_api'),
 ]

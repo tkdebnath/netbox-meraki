@@ -118,6 +118,36 @@ class PluginSettings(models.Model):
         help_text='How to transform SSID names from Meraki'
     )
     
+    # Tag settings - comma-separated tag names
+    site_tags = models.CharField(
+        max_length=500,
+        blank=True,
+        default='Meraki',
+        verbose_name='Site Tags',
+        help_text='Comma-separated list of tags to apply to sites (e.g., "Meraki,Production")'
+    )
+    device_tags = models.CharField(
+        max_length=500,
+        blank=True,
+        default='Meraki',
+        verbose_name='Device Tags',
+        help_text='Comma-separated list of tags to apply to devices (e.g., "Meraki,Network-Device")'
+    )
+    vlan_tags = models.CharField(
+        max_length=500,
+        blank=True,
+        default='Meraki',
+        verbose_name='VLAN Tags',
+        help_text='Comma-separated list of tags to apply to VLANs (e.g., "Meraki,VLAN")'
+    )
+    prefix_tags = models.CharField(
+        max_length=500,
+        blank=True,
+        default='Meraki',
+        verbose_name='Prefix/Subnet Tags',
+        help_text='Comma-separated list of tags to apply to prefixes/subnets (e.g., "Meraki,Subnet")'
+    )
+    
     # Scheduling Settings
     enable_scheduled_sync = models.BooleanField(
         default=False,
@@ -151,6 +181,28 @@ class PluginSettings(models.Model):
         blank=True,
         verbose_name='Next Scheduled Sync',
         help_text='Timestamp of next scheduled sync'
+    )
+    
+    # API Performance Settings
+    enable_api_throttling = models.BooleanField(
+        default=True,
+        verbose_name='Enable API Throttling',
+        help_text='Enable rate limiting to avoid overwhelming Meraki Dashboard API (recommended)'
+    )
+    api_requests_per_second = models.IntegerField(
+        default=5,
+        verbose_name='API Requests Per Second',
+        help_text='Maximum API requests per second (Meraki limit is 10/sec, recommended: 5)'
+    )
+    enable_multithreading = models.BooleanField(
+        default=False,
+        verbose_name='Enable Multithreading',
+        help_text='Use multiple threads to fetch data from Meraki API in parallel (faster but may hit rate limits)'
+    )
+    max_worker_threads = models.IntegerField(
+        default=3,
+        verbose_name='Max Worker Threads',
+        help_text='Maximum number of concurrent threads for API requests (recommended: 2-5)'
     )
     
     class Meta:
@@ -187,6 +239,31 @@ class PluginSettings(models.Model):
             return True
         
         return timezone.now() >= self.next_scheduled_sync
+    
+    def get_tags_for_object_type(self, object_type: str) -> list:
+        """
+        Get list of tag names for a specific object type
+        
+        Args:
+            object_type: One of 'site', 'device', 'vlan', 'prefix'
+        
+        Returns:
+            List of tag names (strings)
+        """
+        tag_field_map = {
+            'site': self.site_tags,
+            'device': self.device_tags,
+            'vlan': self.vlan_tags,
+            'prefix': self.prefix_tags,
+        }
+        
+        tag_string = tag_field_map.get(object_type, 'Meraki')
+        if not tag_string:
+            return ['Meraki']
+        
+        # Split by comma and strip whitespace
+        tags = [tag.strip() for tag in tag_string.split(',') if tag.strip()]
+        return tags if tags else ['Meraki']
     
     def transform_name(self, name: str, transform_type: str) -> str:
         """Apply name transformation based on setting"""

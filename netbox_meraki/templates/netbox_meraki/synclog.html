@@ -264,7 +264,7 @@ function stopAutoRefresh() {
 }
 
 function fetchProgress() {
-    fetch('/api/plugins/netbox-meraki/sync-logs/{{ sync_log.id }}/progress/')
+    fetch('{% url "plugins:netbox_meraki:sync_progress_api" sync_log.id %}')
         .then(response => response.json())
         .then(data => {
             // Update progress bar
@@ -323,7 +323,7 @@ function fetchProgress() {
 
 function cancelSync() {
     if (confirm('Are you sure you want to cancel this sync operation?')) {
-        fetch('/api/plugins/netbox-meraki/sync-logs/{{ sync_log.id }}/cancel/', {
+        fetch('{% url "plugins:netbox_meraki:sync_cancel_api" sync_log.id %}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

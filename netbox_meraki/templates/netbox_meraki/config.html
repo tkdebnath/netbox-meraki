@@ -18,7 +18,13 @@
                 <a class="nav-link" data-bs-toggle="tab" href="#name-transforms" role="tab">Name Transformations</a>
             </li>
             <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#tags" role="tab">Tag Configuration</a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" data-bs-toggle="tab" href="#scheduling" role="tab">Scheduling</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" href="#api-performance" role="tab">API Performance</a>
             </li>
             <li class="nav-item">
                 <a class="nav-link" data-bs-toggle="tab" href="#site-rules" role="tab">Site Name Rules</a>
@@ -211,6 +217,82 @@
                 </div>
             </div>
             
+            <!-- Tag Configuration Tab -->
+            <div class="tab-pane fade" id="tags" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Tag Configuration</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Configure tags to be automatically applied to synced objects. Use comma-separated values for multiple tags.</p>
+                        
+                        <form method="post">
+                            {% csrf_token %}
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.site_tags.id_for_label }}" class="form-label">
+                                            <strong>Site Tags</strong>
+                                        </label>
+                                        {{ form.site_tags }}
+                                        <small class="form-text text-muted">{{ form.site_tags.help_text }}</small>
+                                        <div class="mt-1 text-muted" style="font-size: 0.875rem;">
+                                            <strong>Example:</strong> <code>Meraki,Production</code>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.device_tags.id_for_label }}" class="form-label">
+                                            <strong>Device Tags</strong>
+                                        </label>
+                                        {{ form.device_tags }}
+                                        <small class="form-text text-muted">{{ form.device_tags.help_text }}</small>
+                                        <div class="mt-1 text-muted" style="font-size: 0.875rem;">
+                                            <strong>Example:</strong> <code>Meraki,Network-Device</code>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.vlan_tags.id_for_label }}" class="form-label">
+                                            <strong>VLAN Tags</strong>
+                                        </label>
+                                        {{ form.vlan_tags }}
+                                        <small class="form-text text-muted">{{ form.vlan_tags.help_text }}</small>
+                                        <div class="mt-1 text-muted" style="font-size: 0.875rem;">
+                                            <strong>Example:</strong> <code>Meraki,VLAN</code>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.prefix_tags.id_for_label }}" class="form-label">
+                                            <strong>Prefix/Subnet Tags</strong>
+                                        </label>
+                                        {{ form.prefix_tags }}
+                                        <small class="form-text text-muted">{{ form.prefix_tags.help_text }}</small>
+                                        <div class="mt-1 text-muted" style="font-size: 0.875rem;">
+                                            <strong>Example:</strong> <code>Meraki,Subnet</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="mdi mdi-information"></i> <strong>Note:</strong> 
+                                Tags will be automatically created if they don't exist. Multiple tags can be specified using comma-separated values. 
+                                Changes will apply to newly synced objects and when existing objects are updated during sync.
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">Save Tag Configuration</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Scheduling Tab -->
             <div class="tab-pane fade" id="scheduling" role="tabpanel">
                 <div class="card">
@@ -277,6 +359,84 @@
                             
                             <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary">Save Scheduling Settings</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Performance Tab -->
+            <div class="tab-pane fade" id="api-performance" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <strong>API Performance Settings</strong>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">Configure Meraki Dashboard API performance and rate limiting options.</p>
+                        
+                        <form method="post">
+                            {% csrf_token %}
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <div class="form-check form-switch">
+                                            {{ form.enable_api_throttling }}
+                                            <label class="form-check-label" for="{{ form.enable_api_throttling.id_for_label }}">
+                                                <strong>Enable API Throttling</strong>
+                                            </label>
+                                        </div>
+                                        <small class="form-text text-muted">{{ form.enable_api_throttling.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.api_requests_per_second.id_for_label }}" class="form-label">
+                                            <strong>API Requests Per Second</strong>
+                                        </label>
+                                        {{ form.api_requests_per_second }}
+                                        <small class="form-text text-muted">{{ form.api_requests_per_second.help_text }}</small>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <div class="mb-4">
+                                        <div class="form-check form-switch">
+                                            {{ form.enable_multithreading }}
+                                            <label class="form-check-label" for="{{ form.enable_multithreading.id_for_label }}">
+                                                <strong>Enable Multithreading</strong>
+                                            </label>
+                                        </div>
+                                        <small class="form-text text-muted">{{ form.enable_multithreading.help_text }}</small>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="{{ form.max_worker_threads.id_for_label }}" class="form-label">
+                                            <strong>Max Worker Threads</strong>
+                                        </label>
+                                        {{ form.max_worker_threads }}
+                                        <small class="form-text text-muted">{{ form.max_worker_threads.help_text }}</small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <i class="mdi mdi-information"></i> <strong>About API Performance:</strong>
+                                <ul class="mb-0">
+                                    <li><strong>API Throttling:</strong> Rate limits requests to avoid hitting Meraki Dashboard API limits (10 requests/second). Recommended to keep enabled.</li>
+                                    <li><strong>Multithreading:</strong> Fetches data from multiple networks concurrently for faster syncs. May increase API usage.</li>
+                                    <li><strong>Recommended Settings:</strong> Throttling ON with 5 req/sec, Multithreading OFF for safe operation.</li>
+                                    <li><strong>High-Performance:</strong> Throttling OFF, Multithreading ON with 3-5 threads for fastest sync (may hit rate limits).</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="alert alert-warning">
+                                <i class="mdi mdi-alert"></i> <strong>Warning:</strong> 
+                                Disabling throttling or using too many threads may cause API rate limit errors from Meraki Dashboard. 
+                                Test changes with dry-run mode first.
+                            </div>
+                            
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">Save API Performance Settings</button>
                             </div>
                         </form>
                     </div>
