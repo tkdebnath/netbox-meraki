@@ -148,12 +148,11 @@ class MerakiSyncService:
             sync_mode=self.sync_mode
         )
         
-        # Create review session if needed
-        if self.sync_mode in ['review', 'dry_run']:
-            self.review = SyncReview.objects.create(
-                sync_log=self.sync_log,
-                status='pending'
-            )
+        # Create review session for ALL modes (used for staging and audit trail)
+        self.review = SyncReview.objects.create(
+            sync_log=self.sync_log,
+            status='pending' if self.sync_mode in ['review', 'dry_run'] else 'approved'
+        )
         
         try:
             logger.info("Starting Meraki synchronization")
@@ -422,7 +421,9 @@ class MerakiSyncService:
                 review_item.status = 'failed'
                 review_item.error_message = str(e)
                 review_item.save()
-                logger.error(f"Failed to apply site {site_name}: {e}")
+                error_msg = f"Failed to apply site {site_name}: {e}"
+                logger.error(error_msg)
+                self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                 raise
         else:
             # Review/Dry-run mode: Use existing site or site name for device references
@@ -579,7 +580,9 @@ class MerakiSyncService:
                 review_item.status = 'failed'
                 review_item.error_message = str(e)
                 review_item.save()
-                logger.error(f"Failed to apply device {name}: {e}")
+                error_msg = f"Failed to apply device {name}: {e}"
+                logger.error(error_msg)
+                self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                 raise
             
             return
@@ -985,7 +988,9 @@ class MerakiSyncService:
                         review_item.status = 'failed'
                         review_item.error_message = str(e)
                         review_item.save()
-                        logger.error(f"Failed to apply VLAN {vlan_id} at {site_name}: {e}")
+                        error_msg = f"Failed to apply VLAN {vlan_id} at {site_name}: {e}"
+                        logger.error(error_msg)
+                        self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                     self.stats['vlans'] += 1
                 else:
                     # Review/Dry-run mode: Just count staged items
@@ -1071,7 +1076,9 @@ class MerakiSyncService:
                         review_item.status = 'failed'
                         review_item.error_message = str(e)
                         review_item.save()
-                        logger.error(f"Failed to apply prefix {network} at {site_name}: {e}")
+                        error_msg = f"Failed to apply prefix {network} at {site_name}: {e}"
+                        logger.error(error_msg)
+                        self.sync_log.add_progress_log(f"✗ {error_msg}", "error")
                     self.stats['prefixes'] += 1
                 else:
                     # Review/Dry-run mode: Just count staged items
