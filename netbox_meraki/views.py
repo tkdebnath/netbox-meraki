@@ -697,20 +697,37 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         # Try to import ScheduledJob - try multiple paths for different NetBox versions
         can_schedule = False
         import_error_msg = None
+        
+        # Debug: Log NetBox version
         try:
+            import netbox
+            netbox_version = netbox.settings.VERSION
+            logger.info(f"NetBox version: {netbox_version}")
+        except Exception as e:
+            logger.warning(f"Could not determine NetBox version: {e}")
+        
+        try:
+            logger.info("Attempting to import ScheduledJob from core.models...")
             from core.models import ScheduledJob
+            logger.info("✓ Successfully imported ScheduledJob from core.models")
             from .jobs import MerakiSyncJob
+            logger.info("✓ Successfully imported MerakiSyncJob")
             can_schedule = True
             
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+            logger.info(f"Job class path: {job_class_path}")
             scheduled_jobs = ScheduledJob.objects.filter(
                 job_class=job_class_path
             ).order_by('-created')
+            logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
         except ImportError as e:
             # Try alternate import path
             import_error_msg = str(e)
+            logger.warning(f"✗ Failed to import from core.models: {e}")
             try:
+                logger.info("Attempting to import ScheduledJob from extras.models...")
                 from extras.models import ScheduledJob
+                logger.info("✓ Successfully imported ScheduledJob from extras.models")
                 from .jobs import MerakiSyncJob
                 can_schedule = True
                 
@@ -719,9 +736,10 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     job_class=job_class_path
                 ).order_by('-created')
             except ImportError as e2:
-                logger.warning(f"Could not import ScheduledJob: {e} / {e2}")
+                logger.error(f"✗ Failed to import from extras.models: {e2}")
+                logger.error(f"SCHEDULING DISABLED - Import errors: core.models ({e}) / extras.models ({e2})")
         except Exception as e:
-            logger.error(f"Error fetching scheduled jobs: {e}")
+            logger.error(f"Error fetching scheduled jobs: {e}", exc_info=True)
             messages.warning(request, f'Error loading scheduled jobs: {str(e)}')
         
         # Fetch organizations for dropdown even if scheduling not available
@@ -729,6 +747,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             from .sync_service import MerakiSyncService
             sync_service = MerakiSyncService()
             organizations = sync_service.client.get_organizations()
+            logger.info(f"Loaded {len(organizations)} organizations")
         except Exception as e:
             logger.error(f"Failed to fetch organizations: {e}")
             messages.warning(request, f'Could not load organizations: {str(e)}')
