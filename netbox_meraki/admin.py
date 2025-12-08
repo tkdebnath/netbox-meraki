@@ -1,6 +1,4 @@
-"""
-Admin configuration for NetBox Meraki plugin
-"""
+"""Admin configuration for NetBox Meraki plugin"""
 from django.contrib import admin
 from .models import SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, SyncReview, ReviewItem
 

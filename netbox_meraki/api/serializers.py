@@ -6,7 +6,6 @@ from netbox_meraki.models import SyncLog
 
 
 class SyncLogSerializer(serializers.ModelSerializer):
-    """Serializer for SyncLog model"""
     
     class Meta:
         model = SyncLog

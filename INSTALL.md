@@ -15,7 +15,7 @@
 pip install netbox-meraki
 
 # Or from source
-git clone https://github.com/yourusername/netbox-meraki.git
+git clone https://github.com/tkdebnath/netbox-meraki.git
 cd netbox-meraki
 pip install .
 ```
@@ -25,6 +25,9 @@ pip install .
 Edit your NetBox `configuration.py`:
 
 ```python
+# At the top of the file, ensure you have:
+import os
+
 # Enable the plugin
 PLUGINS = [
     'netbox_meraki',
@@ -33,7 +36,28 @@ PLUGINS = [
 # Configure the plugin
 PLUGINS_CONFIG = {
     'netbox_meraki': {
-        'meraki_api_key': 'your-api-key-here',
+        # Required: Meraki API key (recommended to use environment variable)
+        'meraki_api_key': os.environ.get('MERAKI_API_KEY', ''),
+        
+        # Optional: Auto-creation settings (defaults to True)
+        'auto_create_sites': True,
+        'auto_create_device_types': True,
+        'auto_create_device_roles': True,
+        'auto_create_manufacturers': True,
+        
+        # Optional: Default values
+        # 'default_site_group': None,
+        # 'default_manufacturer': 'Cisco Meraki',
+        # 'meraki_base_url': 'https://api.meraki.com/api/v1',
+        
+        # Optional: Customize default device role names
+        # 'mx_device_role': 'Meraki Firewall',
+        # 'ms_device_role': 'Meraki Switch',
+        # 'mr_device_role': 'Meraki AP',
+        # 'mg_device_role': 'Meraki Cellular Gateway',
+        # 'mv_device_role': 'Meraki Camera',
+        # 'mt_device_role': 'Meraki Sensor',
+        # 'default_device_role': 'Meraki Unknown',
     }
 }
 ```
@@ -60,7 +84,7 @@ When modifying the plugin code, you need to completely uninstall and reinstall i
 
 ```bash
 # Navigate to the plugin directory
-cd /home/tdebnath/ra_netbox_meraki
+cd /path/to/netbox-meraki
 
 # Activate NetBox virtual environment
 source /opt/netbox/venv/bin/activate
@@ -91,7 +115,7 @@ sudo systemctl restart netbox netbox-rq
 Use the provided script for convenience:
 
 ```bash
-cd /home/tdebnath/ra_netbox_meraki
+cd /path/to/netbox-meraki
 ./reinstall.sh
 ```
 

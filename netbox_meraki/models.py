@@ -8,48 +8,47 @@ logger = logging.getLogger(__name__)
 
 
 class PluginSettings(models.Model):
-    """Plugin configuration settings"""
     
     
     mx_device_role = models.CharField(
         max_length=100,
-        default='Security Appliance',
+        default='Meraki Firewall',
         verbose_name='MX Device Role',
         help_text='Device role for MX (Security Appliance) devices'
     )
     ms_device_role = models.CharField(
         max_length=100,
-        default='Switch',
+        default='Meraki Switch',
         verbose_name='MS Device Role',
         help_text='Device role for MS (Switch) devices'
     )
     mr_device_role = models.CharField(
         max_length=100,
-        default='Wireless AP',
+        default='Meraki AP',
         verbose_name='MR Device Role',
         help_text='Device role for MR (Wireless AP) devices'
     )
     mg_device_role = models.CharField(
         max_length=100,
-        default='Cellular Gateway',
+        default='Meraki Cellular Gateway',
         verbose_name='MG Device Role',
         help_text='Device role for MG (Cellular Gateway) devices'
     )
     mv_device_role = models.CharField(
         max_length=100,
-        default='Camera',
+        default='Meraki Camera',
         verbose_name='MV Device Role',
         help_text='Device role for MV (Camera) devices'
     )
     mt_device_role = models.CharField(
         max_length=100,
-        default='Sensor',
+        default='Meraki Sensor',
         verbose_name='MT Device Role',
         help_text='Device role for MT (Sensor) devices'
     )
     default_device_role = models.CharField(
         max_length=100,
-        default='Network Device',
+        default='Meraki Unknown',
         verbose_name='Default Device Role',
         help_text='Default device role for unknown product types'
     )
@@ -292,8 +291,25 @@ class PluginSettings(models.Model):
     @classmethod
     def get_settings(cls):
         """Get or create settings instance"""
-        settings, _ = cls.objects.get_or_create(pk=1)
-        return settings
+        from django.conf import settings as django_settings
+        
+        settings_instance, _ = cls.objects.get_or_create(pk=1)
+        
+        # Check for configuration.py overrides
+        plugin_config = getattr(django_settings, 'PLUGINS_CONFIG', {}).get('netbox_meraki', {})
+        
+        # Override device role names from configuration.py if provided
+        role_fields = [
+            'mx_device_role', 'ms_device_role', 'mr_device_role',
+            'mg_device_role', 'mv_device_role', 'mt_device_role',
+            'default_device_role'
+        ]
+        
+        for field in role_fields:
+            if field in plugin_config:
+                setattr(settings_instance, field, plugin_config[field])
+        
+        return settings_instance
     
     def get_device_role_for_product(self, product_type: str) -> str:
         """Get device role name for a Meraki product type"""

@@ -2,6 +2,105 @@
 {% load static %}
 
 {% block page_content %}
+<style>
+    /* Enhanced badge styling for better visibility in all modes */
+    .config-badge {
+        padding: 8px 16px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+    .config-badge.success {
+        background-color: #28a745;
+        color: #ffffff;
+        border: 2px solid #1e7e34;
+    }
+    .config-badge.info {
+        background-color: #17a2b8;
+        color: #ffffff;
+        border: 2px solid #117a8b;
+    }
+    .config-badge.warning {
+        background-color: #ffc107;
+        color: #000000;
+        border: 2px solid #e0a800;
+    }
+    .config-badge.danger {
+        background-color: #dc3545;
+        color: #ffffff;
+        border: 2px solid #bd2130;
+    }
+    
+    /* Status badge improvements */
+    .status-badge {
+        padding: 6px 14px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-radius: 5px;
+    }
+    .status-badge.success {
+        background-color: #28a745;
+        color: #ffffff;
+    }
+    .status-badge.warning {
+        background-color: #ffc107;
+        color: #000000;
+    }
+    .status-badge.danger {
+        background-color: #dc3545;
+        color: #ffffff;
+    }
+    .status-badge.info {
+        background-color: #17a2b8;
+        color: #ffffff;
+    }
+    .status-badge.running {
+        background-color: #007bff;
+        color: #ffffff;
+    }
+    
+    /* Card header styling */
+    .card-header.config-header {
+        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+        color: #ffffff;
+        font-weight: 600;
+        border: none;
+    }
+    .card-header.sync-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: #ffffff;
+        font-weight: 600;
+        border: none;
+    }
+    .card-header.action-header {
+        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        color: #ffffff;
+        font-weight: 600;
+        border: none;
+    }
+    
+    /* Configuration details */
+    .config-detail {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    .config-detail:last-child {
+        border-bottom: none;
+    }
+    .config-detail .label {
+        font-weight: 600;
+        color: var(--bs-emphasis-color);
+        margin-right: 8px;
+    }
+    .config-detail .value {
+        color: var(--bs-body-color);
+    }
+</style>
+
 <div class="row">
     <div class="col-md-12">
         <h1>Meraki Sync Dashboard</h1>
@@ -11,15 +110,47 @@
 <div class="row mt-4">
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header bg-primary text-white">
+            <div class="card-header config-header">
                 <strong>Configuration Status</strong>
             </div>
             <div class="card-body">
-                {% if api_key_configured %}
-                    <span class="badge bg-success">API Key Configured</span>
-                {% else %}
-                    <span class="badge bg-danger">API Key Not Configured</span>
-                    <p class="mt-2 text-muted">Configure the Meraki API key in NetBox configuration.</p>
+                <div class="config-detail">
+                    <span class="label">API Key:</span>
+                    {% if api_key_configured %}
+                        <span class="config-badge success">
+                            <i class="mdi mdi-check-circle"></i> Configured
+                        </span>
+                    {% else %}
+                        <span class="config-badge danger">
+                            <i class="mdi mdi-alert-circle"></i> Not Configured
+                        </span>
+                        <p class="mt-2 text-muted small">Configure the Meraki API key in NetBox configuration.py</p>
+                    {% endif %}
+                </div>
+                
+                <div class="config-detail mt-3">
+                    <span class="label">Device Roles:</span>
+                    {% if device_roles_configured %}
+                        <span class="config-badge info">
+                            <i class="mdi mdi-cog"></i> {{ configured_roles_count }} Override{{ configured_roles_count|pluralize }}
+                        </span>
+                        <p class="mt-2 text-muted small">Device role names customized in configuration.py</p>
+                    {% else %}
+                        <span class="config-badge warning">
+                            <i class="mdi mdi-information"></i> Using Defaults
+                        </span>
+                        <p class="mt-2 text-muted small">Using default device role names. Customize in configuration.py or web UI.</p>
+                    {% endif %}
+                </div>
+                
+                {% if has_additional_config %}
+                <div class="config-detail mt-3">
+                    <span class="label">Additional Settings:</span>
+                    <span class="config-badge info">
+                        <i class="mdi mdi-tune"></i> {{ other_configs_count }} Parameter{{ other_configs_count|pluralize }}
+                    </span>
+                    <p class="mt-2 text-muted small">Auto-creation, defaults, and other settings configured in configuration.py</p>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -27,14 +158,14 @@
 
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header bg-info text-white">
+            <div class="card-header sync-header">
                 <strong>Latest Sync</strong>
             </div>
             <div class="card-body">
                 {% if latest_sync %}
                     <p><strong>Time:</strong> {{ latest_sync.timestamp }}</p>
                     <p><strong>Status:</strong> 
-                        <span class="badge bg-success">{{ latest_sync.status }}</span>
+                        <span class="status-badge success">{{ latest_sync.status|upper }}</span>
                     </p>
                     <p><strong>Devices:</strong> {{ latest_sync.devices_synced }}</p>
                     <p><strong>VLANs:</strong> {{ latest_sync.vlans_synced }}</p>
@@ -56,20 +187,20 @@
 
     <div class="col-md-4">
         <div class="card">
-            <div class="card-header bg-success text-white">
+            <div class="card-header action-header">
                 <strong>Quick Actions</strong>
             </div>
             <div class="card-body">
-                <a href="{% url 'plugins:netbox_meraki:sync' %}" class="btn btn-primary btn-block mb-2">
+                <a href="{% url 'plugins:netbox_meraki:sync' %}" class="btn btn-primary w-100 mb-2">
                     <i class="mdi mdi-sync"></i> Sync Now
                 </a>
-                <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-success btn-block mb-2">
+                <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-success w-100 mb-2">
                     <i class="mdi mdi-clock-outline"></i> Scheduled Sync
                 </a>
-                <a href="{% url 'plugins:netbox_meraki:review_list' %}" class="btn btn-info btn-block mb-2">
+                <a href="{% url 'plugins:netbox_meraki:review_list' %}" class="btn btn-info w-100 mb-2">
                     <i class="mdi mdi-playlist-check"></i> View Reviews
                 </a>
-                <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary btn-block">
+                <a href="{% url 'plugins:netbox_meraki:config' %}" class="btn btn-secondary w-100">
                     <i class="mdi mdi-cog"></i> View Configuration
                 </a>
             </div>
@@ -105,13 +236,15 @@
                                     <td>{{ log.timestamp }}</td>
                                     <td>
                                         {% if log.status == 'success' %}
-                                            <span class="badge bg-success">{{ log.status }}</span>
+                                            <span class="status-badge success">{{ log.status|upper }}</span>
                                         {% elif log.status == 'partial' %}
-                                            <span class="badge bg-warning">{{ log.status }}</span>
+                                            <span class="status-badge warning">{{ log.status|upper }}</span>
                                         {% elif log.status == 'failed' %}
-                                            <span class="badge bg-danger">{{ log.status }}</span>
+                                            <span class="status-badge danger">{{ log.status|upper }}</span>
+                                        {% elif log.status == 'running' %}
+                                            <span class="status-badge running">{{ log.status|upper }}</span>
                                         {% else %}
-                                            <span class="badge bg-info">{{ log.status }}</span>
+                                            <span class="status-badge info">{{ log.status|upper }}</span>
                                         {% endif %}
                                     </td>
                                     <td>{{ log.organizations_synced }}</td>

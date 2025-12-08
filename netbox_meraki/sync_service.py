@@ -20,10 +20,8 @@ logger = logging.getLogger('netbox_meraki')
 
 
 class MerakiSyncService:
-    """Service for synchronizing Meraki data to NetBox"""
     
     def __init__(self, api_key: Optional[str] = None, sync_mode: Optional[str] = None):
-        """Initialize sync service"""
         self.client = MerakiAPIClient(api_key=api_key)
         self.sync_log = None
         self.sync_mode = sync_mode or PluginSettings.get_settings().sync_mode
@@ -302,6 +300,15 @@ class MerakiSyncService:
             self.sync_log.add_progress_log(f"Found {len(networks)} networks in {org_name}", "info")
         
         for network in networks:
+            # Check for cancellation before processing each network
+            if self.sync_log.check_cancel_requested():
+                self.sync_log.add_progress_log("Sync cancelled by user", "warning")
+                self.sync_log.status = 'failed'
+                self.sync_log.message = "Sync cancelled by user"
+                self.sync_log.save()
+                logger.warning("Sync cancelled by user")
+                return
+            
             try:
                 self._sync_network(network, org_name, meraki_tag, device_status_map)
                 self.stats['networks'] += 1
@@ -331,7 +338,7 @@ class MerakiSyncService:
         self.sync_log.add_progress_log(f"Fetching devices from network: {network_name}", "info")
         devices = self.client.get_devices(network_id)
         
-        # Fetch detailed firmware information from network firmware upgrades API
+        # Get firmware info from network API
         firmware_info_map = {}
         try:
             firmware_data = self.client.get_network_firmware_upgrades(network_id)
@@ -348,7 +355,7 @@ class MerakiSyncService:
         except Exception as e:
             logger.debug(f"Could not fetch detailed firmware info for {network_name}: {e}")
         
-        # Merge firmware information from device statuses and detailed firmware API
+        # Merge firmware info from device status and API
         firmware_count = 0
         for device in devices:
             serial = device.get('serial')
@@ -364,7 +371,7 @@ class MerakiSyncService:
                 if 'publicIp' in status_info:
                     device['publicIp'] = status_info['publicIp']
             
-            # Try to get detailed firmware version from network firmware upgrades API first
+            # Check firmware version from network API first
             if product_type and product_type in firmware_info_map:
                 device['firmware'] = firmware_info_map[product_type]
                 firmware_count += 1
@@ -555,7 +562,7 @@ class MerakiSyncService:
         if meraki_status == 'offline':
             netbox_status = 'offline'
         elif meraki_status == 'dormant':
-            netbox_status = 'offline'  # Dormant devices are essentially offline
+            netbox_status = 'offline'
         elif meraki_status in ['online', 'alerting']:
             netbox_status = 'active'  # Online or alerting devices are active
         

@@ -4,6 +4,10 @@ A comprehensive NetBox plugin for synchronizing Cisco Meraki infrastructure with
 
 **Author:** Tarani Debnath
 
+## Performance
+
+Optimized for efficiency using NetBox's native job scheduling system.
+
 ## Features
 
 ### Core Synchronization
@@ -42,24 +46,6 @@ A comprehensive NetBox plugin for synchronizing Cisco Meraki infrastructure with
 - **API Rate Limiting**: Built-in throttling to respect Meraki API limits
 - **Scheduled Syncs**: Background job support with configurable intervals
 - **Live Progress Tracking**: Real-time sync status with detailed logs
-
-## Screenshots
-
-### Dashboard
-![Dashboard](docs/images/dashboard.png)
-*Main dashboard showing sync status and quick actions*
-
-### Sync Interface
-![Sync Interface](docs/images/sync.png)
-*Start synchronization with organization and network filtering*
-
-### Configuration
-![Configuration](docs/images/configuration.png)
-*Device role mappings and transformation settings*
-
-### API Performance Settings
-![API Performance](docs/images/api_performance.png)
-*API rate limiting and multithreading configuration*
 
 ## Requirements
 
@@ -170,6 +156,9 @@ sudo systemctl restart netbox netbox-rq
 Edit your NetBox `configuration.py` file (located at `/opt/netbox/netbox/netbox/configuration.py`):
 
 ```python
+# At the top of configuration.py, ensure you have:
+import os
+
 # Enable the plugin
 PLUGINS = [
     'netbox_meraki',
@@ -178,12 +167,106 @@ PLUGINS = [
 # Plugin configuration
 PLUGINS_CONFIG = {
     'netbox_meraki': {
-        'meraki_api_key': 'your_meraki_api_key_here',
+        # Required: Meraki API key (can use environment variable)
+        'meraki_api_key': os.environ.get('MERAKI_API_KEY', 'your_meraki_api_key_here'),
+        
+        # Optional: Meraki API base URL (default shown)
         'meraki_base_url': 'https://api.meraki.com/api/v1',
-        'hide_api_key': True,
+        
+        # Optional: Auto-creation settings (all default to True)
+        'auto_create_sites': True,
+        'auto_create_device_types': True,
+        'auto_create_device_roles': True,
+        'auto_create_manufacturers': True,
+        
+        # Optional: Default values
+        'default_site_group': None,  # Site group name or None
+        'default_manufacturer': 'Cisco Meraki',
+        
+        # Optional: Override default device role names
+        'mx_device_role': 'Meraki Firewall',
+        'ms_device_role': 'Meraki Switch',
+        'mr_device_role': 'Meraki AP',
+        'mg_device_role': 'Meraki Cellular Gateway',
+        'mv_device_role': 'Meraki Camera',
+        'mt_device_role': 'Meraki Sensor',
+        'default_device_role': 'Meraki Unknown',
     }
 }
 ```
+
+### Configuration Options
+
+#### Using Environment Variables (Recommended)
+
+For security, it's recommended to use environment variables for sensitive data:
+
+```bash
+# Add to /opt/netbox/netbox/netbox/configuration.py
+import os
+
+PLUGINS_CONFIG = {
+    'netbox_meraki': {
+        'meraki_api_key': os.environ.get('MERAKI_API_KEY', ''),
+        # ... other settings
+    }
+}
+```
+
+Then set the environment variable in your NetBox systemd service or `.env` file:
+```bash
+MERAKI_API_KEY=your_actual_api_key_here
+```
+
+#### Auto-Creation Settings
+
+Control automatic object creation during sync:
+- **`auto_create_sites`** (default: `True`): Automatically create sites from Meraki networks
+- **`auto_create_device_types`** (default: `True`): Automatically create device types for Meraki models
+- **`auto_create_device_roles`** (default: `True`): Automatically create device roles if they don't exist
+- **`auto_create_manufacturers`** (default: `True`): Automatically create the Cisco Meraki manufacturer
+
+#### Default Values
+
+- **`default_site_group`** (default: `None`): Site group name to assign to all created sites
+- **`default_manufacturer`** (default: `'Cisco Meraki'`): Manufacturer name for all Meraki devices
+- **`meraki_base_url`** (default: `'https://api.meraki.com/api/v1'`): Meraki Dashboard API base URL
+
+#### Device Role Name Customization
+
+Device role names can be customized in two ways:
+
+1. **In `configuration.py`** (recommended for consistent defaults):
+   - Add role name overrides to `PLUGINS_CONFIG` as shown above
+   - These apply globally and persist across plugin database resets
+   - Changes require a NetBox restart
+
+2. **In the Web UI** (Plugins > Meraki Sync > Configuration > Device Role Mappings):
+   - Customize role names on a per-installation basis
+   - Changes take effect immediately
+   - Stored in the plugin database
+
+**Priority:** Web UI settings take precedence over `configuration.py` defaults.
+
+#### Complete Configuration Reference
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `meraki_api_key` | string | `''` | **Required.** Meraki Dashboard API key |
+| `meraki_base_url` | string | `'https://api.meraki.com/api/v1'` | Meraki API base URL |
+| `auto_create_sites` | boolean | `True` | Auto-create sites from Meraki networks |
+| `auto_create_device_types` | boolean | `True` | Auto-create device types for Meraki models |
+| `auto_create_device_roles` | boolean | `True` | Auto-create device roles if missing |
+| `auto_create_manufacturers` | boolean | `True` | Auto-create Cisco Meraki manufacturer |
+| `default_site_group` | string/null | `None` | Site group name for all created sites |
+| `default_manufacturer` | string | `'Cisco Meraki'` | Manufacturer name for devices |
+| `mx_device_role` | string | `'Meraki Firewall'` | Device role for MX (Security Appliance) |
+| `ms_device_role` | string | `'Meraki Switch'` | Device role for MS (Switch) |
+| `mr_device_role` | string | `'Meraki AP'` | Device role for MR (Wireless AP) |
+| `mg_device_role` | string | `'Meraki Cellular Gateway'` | Device role for MG (Cellular Gateway) |
+| `mv_device_role` | string | `'Meraki Camera'` | Device role for MV (Camera) |
+| `mt_device_role` | string | `'Meraki Sensor'` | Device role for MT (Sensor) |
+| `default_device_role` | string | `'Meraki Unknown'` | Fallback device role for unknown types |
 
 ### Obtaining a Meraki API Key
 
@@ -232,12 +315,14 @@ Configure which NetBox device role to use for each Meraki product type:
 
 | Product Type | Default Role | Description |
 |--------------|--------------|-------------|
-| MX | Security Appliance | Security appliances and firewalls |
-| MS | Switch | Network switches |
-| MR | Wireless AP | Wireless access points |
-| MG | Cellular Gateway | Cellular gateways |
-| MV | Camera | Security cameras |
-| MT | Sensor | Environmental sensors |
+| MX | Meraki Firewall | Security appliances and firewalls |
+| MS | Meraki Switch | Network switches |
+| MR | Meraki AP | Wireless access points |
+| MG | Meraki Cellular Gateway | Cellular gateways |
+| MV | Meraki Camera | Security cameras |
+| MT | Meraki Sensor | Environmental sensors |
+
+**Note:** Device role names can be overridden in `configuration.py` (see Configuration section above) or customized in the web UI. The plugin will automatically create device roles if they don't exist.
 
 #### Name Transformations Tab
 
@@ -282,63 +367,34 @@ Add tags to all synchronized objects:
 
 ### Scheduled Synchronization
 
-The plugin provides a comprehensive scheduling system to automate synchronization tasks.
+Schedule syncs through NetBox's job system:
 
-#### Access Scheduled Sync
-
-Navigate to **Plugins > Meraki Sync > Scheduled Sync** or click **Scheduled Sync** from the dashboard.
-
-#### Creating a Scheduled Task
-
-1. Click **Create New Task** button
-2. Fill in task details:
-   - **Task Name**: Descriptive name (e.g., "Daily Full Sync")
-   - **Frequency**: One Time, Hourly, Daily, or Weekly
-   - **Start Date/Time**: When should the task first run
-
-3. Configure sync options:
-   - **Sync Mode**: Full Sync, Selective Networks, or Single Network
-   - **Select Networks**: Choose specific networks (for selective/single mode)
-   - **Sync Components**: Toggle organizations, sites, devices, VLANs, prefixes
-   - **Cleanup Orphaned**: Remove objects that no longer exist in Meraki
-   - **Enable Task**: Whether the task is active
-
-4. Click **Create Task**
-
-#### Managing Scheduled Tasks
-
-The scheduled sync page displays all tasks with:
-- Task name and sync mode
-- Frequency and next run time
-- Last run time and status
-- Success rate statistics
-- Enable/disable toggle
-- Edit and delete actions
-
-#### Running Scheduled Tasks
-
-##### Method 1: NetBox Jobs (Recommended - Easiest!)
-
-Use NetBox's built-in job scheduling system:
-
-1. Navigate to **Jobs → Jobs** in NetBox
-2. Find **"Execute Scheduled Sync Tasks"** 
-3. Click **Run Job** → Check **Schedule at**
-4. Set interval: `*/5 * * * *` (every 5 minutes)
+1. Go to **Jobs → Background Jobs** in NetBox
+2. Find **"Meraki Dashboard Sync"**
+3. Click **Run Job Now**
+4. Set **Repeat every** to your desired interval (in minutes):
+   - `60` = Hourly
+   - `1440` = Daily
+   - `10080` = Weekly
 5. Click **Run Job**
 
-NetBox will automatically execute due tasks every 5 minutes. View results in **Jobs → Job Results**.
+Or schedule programmatically:
 
-##### Method 2: Cron Job (Alternative)
+```python
+from netbox_meraki.jobs import MerakiSyncJob
 
-Add to your crontab:
-
-```bash
-# Run every minute to check for due tasks
-* * * * * cd /opt/netbox && /opt/netbox/venv/bin/python manage.py run_scheduled_sync
+MerakiSyncJob.enqueue(user=request.user, interval=60)
 ```
 
-##### Method 3: Systemd Timer
+#### Alternative: Cron Job
+
+Add to crontab:
+
+```bash
+*/5 * * * * cd /opt/netbox && /opt/netbox/venv/bin/python manage.py run_scheduled_sync
+```
+
+#### Alternative: Systemd Timer
 
 Create `/etc/systemd/system/netbox-meraki-scheduler.service`:
 
@@ -358,10 +414,10 @@ Create `/etc/systemd/system/netbox-meraki-scheduler.timer`:
 
 ```ini
 [Unit]
-Description=Run NetBox Meraki Scheduled Sync every minute
+Description=Run NetBox Meraki Scheduled Sync
 
 [Timer]
-OnCalendar=*:0/1
+OnCalendar=*:0/5
 Persistent=true
 
 [Install]
@@ -376,32 +432,7 @@ sudo systemctl enable netbox-meraki-scheduler.timer
 sudo systemctl start netbox-meraki-scheduler.timer
 ```
 
-##### Method 4: Continuous Service
 
-Run as a persistent background service:
-
-```bash
-cd /opt/netbox
-./venv/bin/python manage.py run_scheduled_sync --continuous --interval 60
-```
-
-Or create a systemd service:
-
-```ini
-[Unit]
-Description=NetBox Meraki Scheduler Service
-After=network.target
-
-[Service]
-Type=simple
-User=netbox
-WorkingDirectory=/opt/netbox
-ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py run_scheduled_sync --continuous
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
 
 #### Task Execution and Monitoring
 
@@ -572,14 +603,26 @@ netbox-meraki/
 │   ├── navigation.py
 │   ├── sync_service.py
 │   ├── meraki_client.py
-│   ├── templates/
+│   ├── jobs.py
 │   ├── api/
+│   │   ├── __init__.py
+│   │   ├── serializers.py
+│   │   └── views.py
 │   ├── management/
-│   └── migrations/
+│   │   └── commands/
+│   │       └── run_scheduled_sync.py
+│   ├── migrations/
+│   ├── templates/
+│   │   └── netbox_meraki/
+│   └── templatetags/
 ├── README.md
+├── INSTALL.md
+├── CHANGELOG.md
 ├── LICENSE
 ├── pyproject.toml
-└── requirements.txt
+├── requirements.txt
+├── MANIFEST.in
+└── reinstall.sh
 ```
 
 ### Contributing

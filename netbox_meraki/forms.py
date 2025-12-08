@@ -1,12 +1,9 @@
-"""
-Forms for NetBox Meraki plugin
-"""
+"""Forms for NetBox Meraki plugin"""
 from django import forms
 from .models import PluginSettings, SiteNameRule, PrefixFilterRule, ScheduledSyncTask
 
 
 class PluginSettingsForm(forms.ModelForm):
-    """Form for editing plugin settings"""
     
     class Meta:
         model = PluginSettings
@@ -76,7 +73,6 @@ class PluginSettingsForm(forms.ModelForm):
 
 
 class SiteNameRuleForm(forms.ModelForm):
-    """Form for creating/editing site name rules"""
     
     class Meta:
         model = SiteNameRule
@@ -100,7 +96,6 @@ class SiteNameRuleForm(forms.ModelForm):
 
 
 class PrefixFilterRuleForm(forms.ModelForm):
-    """Form for creating/editing prefix filter rules"""
     
     class Meta:
         model = PrefixFilterRule
@@ -132,7 +127,6 @@ class PrefixFilterRuleForm(forms.ModelForm):
 
 
 class ScheduledSyncTaskForm(forms.ModelForm):
-    """Form for creating/editing scheduled sync tasks"""
     
     class Meta:
         model = ScheduledSyncTask

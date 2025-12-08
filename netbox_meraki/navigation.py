@@ -26,20 +26,13 @@ menu = PluginMenu(
                     )
                 ),
                 PluginMenuItem(
-                    link='plugins:netbox_meraki:scheduled_sync',
-                    link_text='Scheduled Sync',
-                    buttons=(
-                        PluginMenuButton(
-                            link='plugins:netbox_meraki:scheduled_sync',
-                            title='Manage Scheduled Tasks',
-                            icon_class='mdi mdi-calendar-clock',
-                            color=ButtonColorChoices.GREEN
-                        ),
-                    )
-                ),
-                PluginMenuItem(
                     link='plugins:netbox_meraki:config',
                     link_text='Configuration',
+                    buttons=()
+                ),
+                PluginMenuItem(
+                    link='plugins:netbox_meraki:review_list',
+                    link_text='Review Changes',
                     buttons=()
                 ),
             )

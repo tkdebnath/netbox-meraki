@@ -3,6 +3,121 @@
 
 {% block content %}
 <style>
+    /* ========================================
+       Global Plugin Styling - Light & Dark Mode Compatible
+       ======================================== */
+    
+    /* Status Badges - High Contrast for All Themes */
+    .status-badge, .config-badge {
+        padding: 6px 14px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-radius: 5px;
+        display: inline-block;
+        border: 2px solid transparent;
+    }
+    
+    .status-badge.success, .config-badge.success,
+    .badge.bg-success {
+        background-color: #28a745 !important;
+        color: #ffffff !important;
+        border-color: #1e7e34 !important;
+    }
+    
+    .status-badge.warning, .config-badge.warning,
+    .badge.bg-warning {
+        background-color: #ffc107 !important;
+        color: #000000 !important;
+        border-color: #e0a800 !important;
+        font-weight: 700 !important;
+    }
+    
+    .status-badge.danger, .config-badge.danger,
+    .badge.bg-danger {
+        background-color: #dc3545 !important;
+        color: #ffffff !important;
+        border-color: #bd2130 !important;
+    }
+    
+    .status-badge.info, .config-badge.info,
+    .badge.bg-info {
+        background-color: #17a2b8 !important;
+        color: #ffffff !important;
+        border-color: #117a8b !important;
+    }
+    
+    .status-badge.running, .badge.bg-primary {
+        background-color: #007bff !important;
+        color: #ffffff !important;
+        border-color: #0056b3 !important;
+    }
+    
+    .badge.bg-secondary {
+        background-color: #6c757d !important;
+        color: #ffffff !important;
+        border-color: #545b62 !important;
+    }
+    
+    /* Text on warning badges must be dark and bold */
+    .badge.bg-warning.text-dark {
+        color: #000000 !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Enhanced Config Badges */
+    .config-badge {
+        padding: 8px 16px;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    /* Card Headers - Gradient Styling */
+    .card-header.config-header {
+        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
+        color: #ffffff !important;
+        font-weight: 600;
+        border: none;
+    }
+    
+    .card-header.sync-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        color: #ffffff !important;
+        font-weight: 600;
+        border: none;
+    }
+    
+    .card-header.action-header {
+        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+        color: #ffffff !important;
+        font-weight: 600;
+        border: none;
+    }
+    
+    /* Progress Bar - Better Visibility */
+    .progress {
+        background-color: #e9ecef !important;
+        height: 30px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .progress-bar {
+        font-weight: 700;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .progress-text, .progress-bar span {
+        color: #000000 !important;
+        text-shadow: 0 0 5px rgba(255,255,255,0.9);
+        font-weight: 700 !important;
+    }
+    
+    /* Plugin Author Bar */
     .plugin-author-bar {
         display: flex;
         justify-content: flex-end;
@@ -12,14 +127,17 @@
         padding: 8px 0;
         border-bottom: 1px solid var(--bs-border-color);
     }
+    
     .plugin-author {
         font-size: 0.9rem;
         color: var(--bs-secondary-color);
     }
+    
     .plugin-author strong {
         font-weight: 600;
         color: var(--bs-emphasis-color);
     }
+    
     .github-link {
         display: flex;
         align-items: center;
@@ -31,15 +149,53 @@
         transition: all 0.2s ease;
         border: 1px solid var(--bs-border-color);
     }
+    
     .github-link:hover {
         background: var(--bs-table-hover-bg);
         color: var(--bs-emphasis-color);
         border-color: var(--bs-emphasis-color);
     }
+    
     .github-logo {
         width: 18px;
         height: 18px;
         fill: currentColor;
+    }
+    
+    /* Configuration Details */
+    .config-detail {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    
+    .config-detail:last-child {
+        border-bottom: none;
+    }
+    
+    .config-detail .label {
+        font-weight: 600;
+        color: var(--bs-emphasis-color);
+        margin-right: 8px;
+    }
+    
+    .config-detail .value {
+        color: var(--bs-body-color);
+    }
+    
+    /* Button Improvements */
+    .btn {
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    /* Cancel Badge */
+    .cancel-badge {
+        background-color: #ffc107 !important;
+        color: #000000 !important;
+        padding: 6px 12px;
+        font-weight: 700 !important;
+        border-radius: 5px;
+        border: 2px solid #e0a800 !important;
     }
 </style>
 

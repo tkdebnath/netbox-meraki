@@ -12,15 +12,12 @@ from netbox_meraki.sync_service import MerakiSyncService
 
 
 class SyncLogViewSet(viewsets.ReadOnlyModelViewSet):
-    """API viewset for SyncLog"""
-    
     queryset = SyncLog.objects.all()
     serializer_class = SyncLogSerializer
     permission_classes = [IsAuthenticated]
     
     @action(detail=False, methods=['post'])
     def trigger_sync(self, request):
-        """Trigger a new synchronization"""
         try:
             sync_service = MerakiSyncService()
             sync_log = sync_service.sync_all()
@@ -34,7 +31,6 @@ class SyncLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=True, methods=['get'])
     def progress(self, request, pk=None):
-        """Get live progress updates for a sync operation"""
         try:
             sync_log = self.get_object()
             return Response({
@@ -59,7 +55,6 @@ class SyncLogViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
-        """Cancel an ongoing sync operation"""
         try:
             sync_log = self.get_object()
             if sync_log.status not in ['running', 'pending_review']:

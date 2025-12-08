@@ -1,6 +1,4 @@
-"""
-Views for NetBox Meraki plugin
-"""
+"""Views for NetBox Meraki plugin"""
 import logging
 import json
 from datetime import datetime, timedelta
@@ -27,7 +25,6 @@ logger = logging.getLogger('netbox_meraki')
 
 
 class DashboardView(LoginRequiredMixin, View):
-    """Dashboard view showing sync status and recent logs"""
     
     def get(self, request):
         recent_logs = SyncLog.objects.all()[:10]
@@ -37,10 +34,31 @@ class DashboardView(LoginRequiredMixin, View):
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
         api_key_configured = bool(plugin_config.get('meraki_api_key'))
         
+        # Check for device role configuration overrides
+        role_fields = [
+            'mx_device_role', 'ms_device_role', 'mr_device_role',
+            'mg_device_role', 'mv_device_role', 'mt_device_role',
+            'default_device_role'
+        ]
+        device_roles_configured = any(field in plugin_config for field in role_fields)
+        configured_roles = [field for field in role_fields if field in plugin_config]
+        
+        # Check for other configuration parameters
+        config_params = [
+            'auto_create_sites', 'auto_create_device_types', 
+            'auto_create_device_roles', 'auto_create_manufacturers',
+            'default_site_group', 'default_manufacturer', 'meraki_base_url'
+        ]
+        other_configs = [param for param in config_params if param in plugin_config]
+        
         context = {
             'recent_logs': recent_logs,
             'latest_sync': latest_sync,
             'api_key_configured': api_key_configured,
+            'device_roles_configured': device_roles_configured,
+            'configured_roles_count': len(configured_roles),
+            'other_configs_count': len(other_configs),
+            'has_additional_config': len(other_configs) > 0,
         }
         
         return render(request, 'netbox_meraki/dashboard.html', context)
@@ -556,8 +574,7 @@ class SyncCancelAPIView(LoginRequiredMixin, View):
         sync_log = get_object_or_404(SyncLog, pk=pk)
         
         if sync_log.status == 'running':
-            sync_log.cancel_requested = True
-            sync_log.save()
+            sync_log.request_cancel()
             return JsonResponse({'status': 'success', 'message': 'Cancellation requested'})
         else:
             return JsonResponse({'status': 'error', 'message': 'Sync is not running'}, status=400)

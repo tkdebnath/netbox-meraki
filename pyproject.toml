@@ -1,6 +1,6 @@
 [project]
 name = "netbox-meraki"
-version = "1.0.0"
+version = "1.0.1"
 description = "NetBox plugin for synchronizing Cisco Meraki Dashboard networks, devices, VLANs, and prefixes"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,7 +8,7 @@ dependencies = [
     "requests>=2.31.0",
 ]
 authors = [
-    { name = "Tarani Debnath", email = "tarani.debnath@example.com" }
+    { name = "Tarani Debnath" }
 ]
 keywords = ["netbox", "meraki", "cisco", "plugin", "network", "automation", "ipam", "dcim"]
 classifiers = [

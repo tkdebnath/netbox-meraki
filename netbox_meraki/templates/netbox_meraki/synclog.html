@@ -1,6 +1,64 @@
 {% extends 'netbox_meraki/base.html' %}
 
 {% block page_content %}
+<style>
+    /* Enhanced status badge styling */
+    .status-badge {
+        padding: 6px 14px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border-radius: 5px;
+        display: inline-block;
+    }
+    .status-badge.success {
+        background-color: #28a745;
+        color: #ffffff;
+    }
+    .status-badge.warning {
+        background-color: #ffc107;
+        color: #000000;
+    }
+    .status-badge.danger {
+        background-color: #dc3545;
+        color: #ffffff;
+    }
+    .status-badge.info {
+        background-color: #17a2b8;
+        color: #ffffff;
+    }
+    .status-badge.running {
+        background-color: #007bff;
+        color: #ffffff;
+    }
+    
+    /* Cancel badge */
+    .cancel-badge {
+        background-color: #ffc107;
+        color: #000000;
+        padding: 6px 12px;
+        font-weight: 600;
+        border-radius: 5px;
+    }
+    
+    /* Progress bar text visibility */
+    .progress {
+        background-color: var(--bs-gray-300);
+        height: 30px;
+    }
+    .progress-bar {
+        font-weight: 600;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .progress-text {
+        color: #000000;
+        text-shadow: 0 0 5px rgba(255,255,255,0.9);
+        font-weight: 700;
+    }
+</style>
+
 <div class="row">
     <div class="col-md-12">
         <h1>Sync Log Details</h1>
@@ -24,15 +82,15 @@
                             <th>Status:</th>
                             <td>
                                 {% if sync_log.status == 'success' %}
-                                    <span class="badge bg-success">{{ sync_log.status }}</span>
+                                    <span class="status-badge success">{{ sync_log.status|upper }}</span>
                                 {% elif sync_log.status == 'partial' %}
-                                    <span class="badge bg-warning">{{ sync_log.status }}</span>
+                                    <span class="status-badge warning">{{ sync_log.status|upper }}</span>
                                 {% elif sync_log.status == 'failed' %}
-                                    <span class="badge bg-danger">{{ sync_log.status }}</span>
+                                    <span class="status-badge danger">{{ sync_log.status|upper }}</span>
                                 {% elif sync_log.status == 'running' %}
-                                    <span class="badge bg-primary">{{ sync_log.status }}</span>
+                                    <span class="status-badge running">{{ sync_log.status|upper }}</span>
                                 {% else %}
-                                    <span class="badge bg-info">{{ sync_log.status }}</span>
+                                    <span class="status-badge info">{{ sync_log.status|upper }}</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -44,14 +102,14 @@
                         <tr>
                             <th>Progress:</th>
                             <td>
-                                <div class="progress" style="background-color: var(--bs-gray-300); height: 25px;">
+                                <div class="progress">
                                     <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
                                          role="progressbar" 
-                                         style="width: {{ sync_log.progress_percent }}%; font-weight: 600; color: #000;"
+                                         style="width: {{ sync_log.progress_percent }}%;"
                                          aria-valuenow="{{ sync_log.progress_percent }}" 
                                          aria-valuemin="0" 
                                          aria-valuemax="100">
-                                        <span id="progress-text" style="color: #000; text-shadow: 0 0 3px rgba(255,255,255,0.8);">{{ sync_log.progress_percent }}%</span>
+                                        <span id="progress-text" class="progress-text">{{ sync_log.progress_percent }}%</span>
                                     </div>
                                 </div>
                             </td>
@@ -74,7 +132,15 @@
                         {% if sync_log.cancel_requested %}
                         <tr>
                             <th>Cancellation:</th>
-                            <td><span class="badge bg-warning">Cancellation Requested at {{ sync_log.cancelled_at }}</span></td>
+                            <td>
+                                <span class="cancel-badge">
+                                    {% if sync_log.cancelled_at %}
+                                        Cancellation Requested at {{ sync_log.cancelled_at|date:"Y-m-d H:i:s" }}
+                                    {% else %}
+                                        Cancellation Requested
+                                    {% endif %}
+                                </span>
+                            </td>
                         </tr>
                         {% endif %}
                     </tbody>
