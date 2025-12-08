@@ -1162,6 +1162,7 @@ class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 'custom_interval': custom_interval,
                 'sync_mode': job_kwargs.get('sync_mode', 'review'),
                 'organization_id': job_kwargs.get('organization_id', ''),
+                'network_ids': job_kwargs.get('network_ids', []),
                 'sync_all_networks': not job_kwargs.get('network_ids'),
                 # Note: NetBox 4.4.x doesn't have 'enabled' field
             }
