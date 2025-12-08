@@ -92,6 +92,41 @@ class Migration(migrations.Migration):
             },
         ),
         
+        # SiteNameRule Model
+        migrations.CreateModel(
+            name='SiteNameRule',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ('order', models.IntegerField(default=0, help_text='Processing order (lower numbers processed first)')),
+                ('pattern', models.CharField(help_text='Regular expression pattern to match Meraki network names', max_length=255)),
+                ('site_name_format', models.CharField(help_text='Format for site name (use {group1}, {group2}, etc. for regex groups)', max_length=255)),
+                ('site_group', models.CharField(blank=True, help_text='Optional site group name', max_length=100)),
+                ('enabled', models.BooleanField(default=True, help_text='Whether this rule is active')),
+            ],
+            options={
+                'verbose_name': 'Site Name Rule',
+                'verbose_name_plural': 'Site Name Rules',
+                'ordering': ['order', 'id'],
+            },
+        ),
+        
+        # PrefixFilterRule Model
+        migrations.CreateModel(
+            name='PrefixFilterRule',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ('order', models.IntegerField(default=0, help_text='Processing order (lower numbers processed first)')),
+                ('pattern', models.CharField(help_text='Regular expression pattern to match prefix/network addresses', max_length=255)),
+                ('action', models.CharField(choices=[('include', 'Include'), ('exclude', 'Exclude')], default='include', help_text='Whether to include or exclude matching prefixes', max_length=10)),
+                ('enabled', models.BooleanField(default=True, help_text='Whether this rule is active')),
+            ],
+            options={
+                'verbose_name': 'Prefix Filter Rule',
+                'verbose_name_plural': 'Prefix Filter Rules',
+                'ordering': ['order', 'id'],
+            },
+        ),
+        
         # SyncLog Model
         migrations.CreateModel(
             name='SyncLog',
@@ -118,53 +153,11 @@ class Migration(migrations.Migration):
                 ('progress_percent', models.IntegerField(default=0, help_text='Overall progress percentage')),
                 ('cancel_requested', models.BooleanField(default=False, help_text='Flag to cancel ongoing sync')),
                 ('cancelled_at', models.DateTimeField(blank=True, help_text='When sync was cancelled', null=True)),
-                ('sync_mode', models.CharField(choices=[('auto', 'Auto Sync'), ('review', 'Sync with Review'), ('dry_run', 'Dry Run')], default='auto', max_length=20)),
             ],
             options={
                 'verbose_name': 'Sync Log',
                 'verbose_name_plural': 'Sync Logs',
                 'ordering': ['-timestamp'],
-            },
-        ),
-        
-        # SiteNameRule Model
-        migrations.CreateModel(
-            name='SiteNameRule',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
-                ('name', models.CharField(help_text='Descriptive name for this rule', max_length=100, unique=True)),
-                ('regex_pattern', models.CharField(help_text='Regular expression to match network names (e.g., "^(?P<region>NA|EMEA)-(?P<site>[A-Z]{3})$"). Use (?P<name>...) for named groups', max_length=500, verbose_name='Regex Pattern')),
-                ('site_name_template', models.CharField(help_text='Template for site name. Use {name} for named groups, {0}/{1} for numbered groups, or {network_name} for full name', max_length=200, verbose_name='Site Name Template')),
-                ('priority', models.IntegerField(default=100, help_text='Rule priority (lower values are evaluated first)')),
-                ('enabled', models.BooleanField(default=True, help_text='Enable or disable this rule')),
-                ('description', models.TextField(blank=True, help_text='Optional description of what this rule does')),
-            ],
-            options={
-                'verbose_name': 'Site Name Rule',
-                'verbose_name_plural': 'Site Name Rules',
-                'ordering': ['priority', 'name'],
-            },
-        ),
-        
-        # PrefixFilterRule Model
-        migrations.CreateModel(
-            name='PrefixFilterRule',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
-                ('name', models.CharField(help_text='Descriptive name for this filter rule', max_length=100, unique=True)),
-                ('filter_type', models.CharField(choices=[('exclude', 'Exclude Matching Prefixes'), ('include_only', 'Include Only Matching Prefixes')], default='exclude', help_text='Whether to exclude or include only matching prefixes', max_length=20, verbose_name='Filter Type')),
-                ('prefix_pattern', models.CharField(blank=True, help_text='Prefix pattern to match (e.g., "192.168.0.0/16", "10.0.0.0/8"). Leave blank to match all prefixes.', max_length=200, verbose_name='Prefix Pattern')),
-                ('prefix_length_filter', models.CharField(choices=[('exact', 'Exact Length'), ('greater', 'Greater Than'), ('less', 'Less Than'), ('range', 'Range')], default='exact', help_text='How to filter by prefix length', max_length=20, verbose_name='Prefix Length Filter')),
-                ('min_prefix_length', models.IntegerField(blank=True, help_text='Minimum prefix length (1-32 for IPv4, 1-128 for IPv6). Used for "greater", "less", and "range" filters.', null=True, verbose_name='Minimum Prefix Length')),
-                ('max_prefix_length', models.IntegerField(blank=True, help_text='Maximum prefix length (1-32 for IPv4, 1-128 for IPv6). Used for "range" filter only.', null=True, verbose_name='Maximum Prefix Length')),
-                ('priority', models.IntegerField(default=100, help_text='Rule priority (lower values are evaluated first)')),
-                ('enabled', models.BooleanField(default=True, help_text='Enable or disable this rule')),
-                ('description', models.TextField(blank=True, help_text='Optional description of what this rule does')),
-            ],
-            options={
-                'verbose_name': 'Prefix Filter Rule',
-                'verbose_name_plural': 'Prefix Filter Rules',
-                'ordering': ['priority', 'name'],
             },
         ),
         
@@ -174,9 +167,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
                 ('created', models.DateTimeField(auto_now_add=True)),
-                ('reviewed', models.DateTimeField(blank=True, null=True)),
-                ('reviewed_by', models.CharField(blank=True, max_length=100)),
-                ('status', models.CharField(choices=[('pending', 'Pending Review'), ('approved', 'Approved'), ('partially_approved', 'Partially Approved'), ('rejected', 'Rejected'), ('applied', 'Applied')], default='pending', max_length=20)),
+                ('status', models.CharField(choices=[('pending', 'Pending Review'), ('in_progress', 'In Progress'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
                 ('items_total', models.IntegerField(default=0)),
                 ('items_approved', models.IntegerField(default=0)),
                 ('items_rejected', models.IntegerField(default=0)),
