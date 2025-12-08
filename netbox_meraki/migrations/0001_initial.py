@@ -211,9 +211,9 @@ class Migration(migrations.Migration):
             name='ScheduledJobTracker',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
-                ('netbox_job_id', models.IntegerField(unique=True, help_text='The NetBox Job ID for the scheduled job')),
-                ('job_name', models.CharField(max_length=200, help_text='User-provided name for the scheduled job')),
-                ('created', models.DateTimeField(auto_now_add=True, help_text='When this job was created')),
+                ('netbox_job_id', models.IntegerField(unique=True, verbose_name='NetBox Job ID', help_text='ID of the NetBox scheduled job')),
+                ('job_name', models.CharField(max_length=200, verbose_name='Job Name', help_text='User-provided name for the job')),
+                ('created', models.DateTimeField(auto_now_add=True, verbose_name='Created')),
             ],
             options={
                 'verbose_name': 'Scheduled Job Tracker',
