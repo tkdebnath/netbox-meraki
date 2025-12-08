@@ -1120,8 +1120,14 @@ class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 logger.error(f"Failed to fetch organizations: {e}")
                 organizations = []
             
-            # Parse job kwargs
-            job_kwargs = job.job_kwargs if hasattr(job, 'job_kwargs') else {}
+            # Parse job kwargs - try different attribute names for compatibility
+            job_kwargs = {}
+            if hasattr(job, 'job_kwargs') and job.job_kwargs:
+                job_kwargs = job.job_kwargs
+            elif hasattr(job, 'kwargs') and job.kwargs:
+                job_kwargs = job.kwargs
+            
+            logger.info(f"Editing job {pk}: job_kwargs = {job_kwargs}")
             
             # Determine interval value
             if job.interval:
@@ -1218,7 +1224,15 @@ class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     if filtered_ids:
                         job_kwargs['network_ids'] = filtered_ids
                 
-                job.job_kwargs = job_kwargs
+                # Save kwargs using the correct attribute name
+                if hasattr(job, 'job_kwargs'):
+                    job.job_kwargs = job_kwargs
+                elif hasattr(job, 'kwargs'):
+                    job.kwargs = job_kwargs
+                else:
+                    logger.warning(f"Job object has no job_kwargs or kwargs attribute")
+                
+                logger.info(f"Saving job with kwargs: {job_kwargs}")
                 job.save()
                 
                 messages.success(request, f'Scheduled job "{job.name}" updated successfully.')
