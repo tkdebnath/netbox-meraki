@@ -33,24 +33,6 @@ class MerakiConfig(PluginConfig):
     
     def ready(self):
         super().ready()
-        self._cancel_running_tasks()
-    
-    def _cancel_running_tasks(self):
-        """Cancel any running sync tasks from previous NetBox session"""
-        try:
-            from .models import SyncLog
-            from django.utils import timezone
-            
-            running_syncs = SyncLog.objects.filter(status='running')
-            if running_syncs.exists():
-                for sync_log in running_syncs:
-                    sync_log.status = 'failed'
-                    sync_log.message = 'Sync interrupted by NetBox restart'
-                    sync_log.add_progress_log('Sync cancelled due to NetBox restart', 'error')
-                    sync_log.save()
-                print(f"Cancelled {running_syncs.count()} running sync task(s) from previous session")
-        except Exception as e:
-            print(f"Error cancelling running tasks: {e}")
 
 
 config = MerakiConfig

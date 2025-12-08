@@ -24,7 +24,7 @@ class MerakiSyncService:
     def __init__(self, api_key: Optional[str] = None, sync_mode: Optional[str] = None):
         self.client = MerakiAPIClient(api_key=api_key)
         self.sync_log = None
-        self.sync_mode = sync_mode or PluginSettings.get_settings().sync_mode
+        self.sync_mode = sync_mode
         self.review = None
         self.stats = {
             'organizations': 0,
@@ -133,6 +133,10 @@ class MerakiSyncService:
         
         
         self._cleanup_old_review_items()
+        
+        # Set default sync mode if not provided
+        if not self.sync_mode:
+            self.sync_mode = PluginSettings.get_settings().sync_mode
         
         # Determine status based on sync mode
         if self.sync_mode == 'dry_run':
