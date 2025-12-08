@@ -691,9 +691,15 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'extras.view_scheduledjob'
     
     def get(self, request):
-        print("=" * 80)
-        print("SCHEDULED SYNC VIEW - GET METHOD CALLED")
-        print("=" * 80)
+        import sys
+        sys.stderr.write("=" * 80 + "\n")
+        sys.stderr.write("SCHEDULED SYNC VIEW - GET METHOD CALLED\n")
+        sys.stderr.write("=" * 80 + "\n")
+        sys.stderr.flush()
+        
+        print("=" * 80, file=sys.stderr)
+        print("SCHEDULED SYNC VIEW - GET METHOD CALLED", file=sys.stderr)
+        print("=" * 80, file=sys.stderr)
         
         scheduled_jobs = []
         organizations = []
@@ -707,28 +713,28 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             import netbox
             netbox_version = netbox.settings.VERSION
-            logger.info(f"NetBox version: {netbox_version}")
-            print(f"✓ NetBox version: {netbox_version}")
+            logger.error(f"NetBox version: {netbox_version}")  # Use error level to ensure it shows
+            print(f"✓ NetBox version: {netbox_version}", file=sys.stderr)
             exception_details.append(f"✓ NetBox version: {netbox_version}")
         except Exception as e:
-            logger.warning(f"Could not determine NetBox version: {e}")
-            print(f"⚠ Version check failed: {str(e)}")
+            logger.error(f"Could not determine NetBox version: {e}")
+            print(f"⚠ Version check failed: {str(e)}", file=sys.stderr)
             exception_details.append(f"⚠ Version check failed: {str(e)}")
         
         try:
-            print("Attempting to import ScheduledJob from core.models.jobs...")
-            logger.info("Attempting to import ScheduledJob from core.models.jobs...")
+            print("Attempting to import ScheduledJob from core.models.jobs...", file=sys.stderr)
+            logger.error("Attempting to import ScheduledJob from core.models.jobs...")
             from core.models.jobs import Job as ScheduledJob
-            logger.info("✓ Successfully imported ScheduledJob from core.models.jobs")
-            print("✓ Successfully imported ScheduledJob from core.models.jobs")
+            logger.error("✓ Successfully imported ScheduledJob from core.models.jobs")
+            print("✓ Successfully imported ScheduledJob from core.models.jobs", file=sys.stderr)
             exception_details.append("✓ Import: core.models.jobs.Job")
             
             from .jobs import MerakiSyncJob
-            logger.info("✓ Successfully imported MerakiSyncJob")
-            print("✓ Successfully imported MerakiSyncJob")
+            logger.error("✓ Successfully imported MerakiSyncJob")
+            print("✓ Successfully imported MerakiSyncJob", file=sys.stderr)
             exception_details.append("✓ Import: MerakiSyncJob")
             can_schedule = True
-            print(f"✓ can_schedule set to: {can_schedule}")
+            print(f"✓ can_schedule set to: {can_schedule}", file=sys.stderr)
             
             # In NetBox 4.4+, filter by name instead of job_class
             try:
@@ -815,14 +821,16 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         form = ScheduledSyncForm(organizations=organizations)
         
-        print(f"FINAL STATE: can_schedule = {can_schedule}")
-        print(f"FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}")
-        print(f"Exception details: {exception_details}")
-        print("=" * 80)
+        import sys
+        sys.stderr.write(f"FINAL STATE: can_schedule = {can_schedule}\n")
+        sys.stderr.write(f"FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}\n")
+        sys.stderr.write(f"Exception details: {exception_details}\n")
+        sys.stderr.write("=" * 80 + "\n")
+        sys.stderr.flush()
         
-        logger.info(f"DEBUG: can_schedule = {can_schedule}")
-        logger.info(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
-        logger.info(f"DEBUG: Exception details: {exception_details}")
+        logger.error(f"DEBUG: can_schedule = {can_schedule}")
+        logger.error(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
+        logger.error(f"DEBUG: Exception details: {exception_details}")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
