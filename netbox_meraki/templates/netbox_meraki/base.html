@@ -17,50 +17,77 @@
         border: 2px solid transparent;
     }
     
+    /* Success Badges - Green */
     .status-badge.success, .config-badge.success,
     .badge.bg-success {
-        background-color: #28a745 !important;
+        background-color: #198754 !important;
         color: #ffffff !important;
-        border-color: #1e7e34 !important;
+        border-color: #146c43 !important;
+        font-weight: 600 !important;
     }
     
+    /* Warning Badges - Amber with Dark Text */
     .status-badge.warning, .config-badge.warning,
     .badge.bg-warning {
         background-color: #ffc107 !important;
         color: #000000 !important;
-        border-color: #e0a800 !important;
+        border-color: #d39e00 !important;
         font-weight: 700 !important;
     }
     
+    /* Danger Badges - Red */
     .status-badge.danger, .config-badge.danger,
     .badge.bg-danger {
         background-color: #dc3545 !important;
         color: #ffffff !important;
-        border-color: #bd2130 !important;
+        border-color: #b02a37 !important;
+        font-weight: 600 !important;
     }
     
+    /* Info Badges - Cyan */
     .status-badge.info, .config-badge.info,
     .badge.bg-info {
-        background-color: #17a2b8 !important;
-        color: #ffffff !important;
-        border-color: #117a8b !important;
+        background-color: #0dcaf0 !important;
+        color: #000000 !important;
+        border-color: #0aa2c0 !important;
+        font-weight: 700 !important;
     }
     
+    /* Primary Badges - Blue */
     .status-badge.running, .badge.bg-primary {
-        background-color: #007bff !important;
+        background-color: #0d6efd !important;
         color: #ffffff !important;
-        border-color: #0056b3 !important;
+        border-color: #0a58ca !important;
+        font-weight: 600 !important;
     }
     
+    /* Secondary Badges - Gray */
     .badge.bg-secondary {
         background-color: #6c757d !important;
         color: #ffffff !important;
-        border-color: #545b62 !important;
+        border-color: #565e64 !important;
+        font-weight: 600 !important;
     }
     
-    /* Text on warning badges must be dark and bold */
-    .badge.bg-warning.text-dark {
-        color: #000000 !important;
+    /* Light Badges - Always visible in both themes */
+    .badge.bg-light {
+        background-color: #f8f9fa !important;
+        color: #212529 !important;
+        border: 1px solid #dee2e6 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Dark mode adjustments for bg-light */
+    [data-bs-theme="dark"] .badge.bg-light,
+    .dark-mode .badge.bg-light {
+        background-color: #495057 !important;
+        color: #f8f9fa !important;
+        border-color: #6c757d !important;
+    }
+    
+    /* Text on warning and info badges must be dark and bold */
+    .badge.bg-warning.text-dark,
+    .badge.bg-info.text-white {
         font-weight: 700 !important;
     }
     
@@ -74,26 +101,100 @@
         gap: 8px;
     }
     
-    /* Card Headers - Gradient Styling */
+    /* Card Headers - Better Visibility */
+    .card-header.bg-info {
+        background-color: #0dcaf0 !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
+        border: none;
+    }
+    
     .card-header.config-header {
-        background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
-        color: #ffffff !important;
-        font-weight: 600;
+        background-color: #0dcaf0 !important;
+        color: #000000 !important;
+        font-weight: 700 !important;
         border: none;
     }
     
     .card-header.sync-header {
-        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%) !important;
+        background-color: #0d6efd !important;
         color: #ffffff !important;
-        font-weight: 600;
+        font-weight: 600 !important;
         border: none;
     }
     
     .card-header.action-header {
-        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+        background-color: #198754 !important;
         color: #ffffff !important;
-        font-weight: 600;
+        font-weight: 600 !important;
         border: none;
+    }
+    
+    /* Alert Styling - Better Contrast */
+    .alert-info {
+        background-color: #cff4fc !important;
+        color: #055160 !important;
+        border-color: #9eeaf9 !important;
+    }
+    
+    [data-bs-theme="dark"] .alert-info,
+    .dark-mode .alert-info {
+        background-color: #055160 !important;
+        color: #cff4fc !important;
+        border-color: #087990 !important;
+    }
+    
+    .alert-warning {
+        background-color: #fff3cd !important;
+        color: #664d03 !important;
+        border-color: #ffecb5 !important;
+    }
+    
+    [data-bs-theme="dark"] .alert-warning,
+    .dark-mode .alert-warning {
+        background-color: #664d03 !important;
+        color: #fff3cd !important;
+        border-color: #997404 !important;
+    }
+    
+    .alert-danger {
+        background-color: #f8d7da !important;
+        color: #842029 !important;
+        border-color: #f5c2c7 !important;
+    }
+    
+    [data-bs-theme="dark"] .alert-danger,
+    .dark-mode .alert-danger {
+        background-color: #842029 !important;
+        color: #f8d7da !important;
+        border-color: #a52834 !important;
+    }
+    
+    .alert-secondary {
+        background-color: #e2e3e5 !important;
+        color: #41464b !important;
+        border-color: #d3d6d8 !important;
+    }
+    
+    [data-bs-theme="dark"] .alert-secondary,
+    .dark-mode .alert-secondary {
+        background-color: #41464b !important;
+        color: #e2e3e5 !important;
+        border-color: #52575c !important;
+    }
+    
+    /* Pre/Code blocks - Better Visibility */
+    pre.bg-light {
+        background-color: #f8f9fa !important;
+        color: #212529 !important;
+        border: 1px solid #dee2e6 !important;
+    }
+    
+    [data-bs-theme="dark"] pre.bg-light,
+    .dark-mode pre.bg-light {
+        background-color: #343a40 !important;
+        color: #f8f9fa !important;
+        border-color: #495057 !important;
     }
     
     /* Progress Bar - Better Visibility */
