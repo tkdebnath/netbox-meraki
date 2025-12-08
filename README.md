@@ -1,51 +1,46 @@
 # NetBox Meraki Sync Plugin
 
-A comprehensive NetBox plugin for synchronizing Cisco Meraki infrastructure with NetBox. Automatically imports networks, devices, VLANs, IP prefixes, wireless LANs, and maintains accurate inventory with intelligent cleanup capabilities.
+NetBox plugin for synchronizing Cisco Meraki infrastructure with NetBox. Imports networks, devices, VLANs, IP prefixes, and wireless LANs.
 
 **Author:** Tarani Debnath
-
-## Performance
-
-Optimized for efficiency using NetBox's native job scheduling system.
 
 ## Features
 
 ### Core Synchronization
 - **Organizations & Networks**: Sync single or multiple Meraki organizations with selective network filtering
-- **Sites**: Meraki networks automatically mapped to NetBox sites with customizable name rules
-- **Devices**: Complete device inventory with accurate models, roles, and serial numbers
-  - Automatic device role assignment based on product type (MX, MS, MR, MG, MV, MT)
-  - Color-coded roles for easy visual identification
+- **Sites**: Meraki networks mapped to NetBox sites with customizable name rules
+- **Devices**: Device inventory with models, roles, and serial numbers
+  - Device role assignment based on product type (MX, MS, MR, MG, MV, MT)
   - Firmware version tracking via custom fields
   - MAC address storage
-  - Device status monitoring (active/offline)
-- **VLANs**: Import configured VLANs from MX security appliances
-- **IP Prefixes/Subnets**: Automatic prefix discovery with site association
+  - Device status monitoring
+- **VLANs**: Import VLANs from MX security appliances
+- **IP Prefixes/Subnets**: Prefix discovery with site association
 - **Interfaces**: 
   - WAN interfaces with public IP assignments for MX devices
-  - SVI (VLAN) interfaces for all configured VLANs on MX appliances
+  - SVI (VLAN) interfaces for configured VLANs on MX appliances
   - Wireless interfaces for access points
-- **Wireless LANs**: Native NetBox Wireless LAN objects for SSIDs
+- **Wireless LANs**: NetBox Wireless LAN objects for SSIDs
   - Organization-wide SSID management
-  - Automatic association with access points
+  - Association with access points
   - Authentication and encryption tracking
 
 ### Advanced Features
 - **Three Sync Modes**:
-  - **Auto Sync**: Immediate application of changes
+  - **Auto Sync**: Changes apply immediately
   - **Review Mode**: Stage changes for manual approval
   - **Dry Run**: Preview changes without modifications
-- **Intelligent Cleanup**: Automatic removal of objects no longer in Meraki
-- **Flexible Filtering**:
+- **Cleanup**: Automatic removal of objects no longer in Meraki
+- **Filtering**:
   - Organization selection
   - Network-specific sync
   - Prefix filtering with include/exclude rules
   - Site name transformation rules
 - **Name Transformations**: Standardize naming across devices, sites, VLANs, and SSIDs
-- **Tag Management**: Optional tagging for all synchronized objects
-- **API Rate Limiting**: Built-in throttling to respect Meraki API limits
+- **Tag Management**: Optional tagging for synchronized objects
+- **API Rate Limiting**: Throttling to respect Meraki API limits
 - **Scheduled Syncs**: Background job support with configurable intervals
-- **Live Progress Tracking**: Real-time sync status with detailed logs
+- **Progress Tracking**: Real-time sync status with detailed logs
 
 ## Requirements
 
