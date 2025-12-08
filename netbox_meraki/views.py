@@ -38,7 +38,7 @@ class DashboardView(LoginRequiredMixin, View):
         scheduled_jobs = []
         scheduled_jobs_count = 0
         try:
-            from core.models.jobs import ScheduledJob
+            from core.models.jobs import Job as ScheduledJob
             from .jobs import MerakiSyncJob
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(
@@ -708,7 +708,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         try:
             logger.info("Attempting to import ScheduledJob from core.models.jobs...")
-            from core.models.jobs import ScheduledJob
+            from core.models.jobs import Job as ScheduledJob
             logger.info("✓ Successfully imported ScheduledJob from core.models.jobs")
             from .jobs import MerakiSyncJob
             logger.info("✓ Successfully imported MerakiSyncJob")
@@ -855,7 +855,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         # If form invalid, reload page with errors
         try:
-            from core.models.jobs import ScheduledJob
+            from core.models.jobs import Job as ScheduledJob
             from .jobs import MerakiSyncJob
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(job_class=job_class_path).order_by('-created')
@@ -877,7 +877,7 @@ class ScheduledSyncDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View)
     
     def post(self, request, pk):
         try:
-            from core.models.jobs import ScheduledJob
+            from core.models.jobs import Job as ScheduledJob
             
             job = get_object_or_404(ScheduledJob, pk=pk)
             job_name = job.name
@@ -899,7 +899,7 @@ class ScheduledSyncToggleView(LoginRequiredMixin, PermissionRequiredMixin, View)
     
     def post(self, request, pk):
         try:
-            from core.models.jobs import ScheduledJob
+            from core.models.jobs import Job as ScheduledJob
             
             job = get_object_or_404(ScheduledJob, pk=pk)
             job.enabled = not job.enabled
