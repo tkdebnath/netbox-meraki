@@ -38,7 +38,7 @@ class DashboardView(LoginRequiredMixin, View):
         scheduled_jobs = []
         scheduled_jobs_count = 0
         try:
-            from core.models import ScheduledJob
+            from core.models.jobs import ScheduledJob
             from .jobs import MerakiSyncJob
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(
@@ -707,9 +707,9 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             logger.warning(f"Could not determine NetBox version: {e}")
         
         try:
-            logger.info("Attempting to import ScheduledJob from core.models...")
-            from core.models import ScheduledJob
-            logger.info("✓ Successfully imported ScheduledJob from core.models")
+            logger.info("Attempting to import ScheduledJob from core.models.jobs...")
+            from core.models.jobs import ScheduledJob
+            logger.info("✓ Successfully imported ScheduledJob from core.models.jobs")
             from .jobs import MerakiSyncJob
             logger.info("✓ Successfully imported MerakiSyncJob")
             can_schedule = True
@@ -723,7 +723,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except ImportError as e:
             # Try alternate import path
             import_error_msg = str(e)
-            logger.warning(f"✗ Failed to import from core.models: {e}")
+            logger.warning(f"✗ Failed to import from core.models.jobs: {e}")
             try:
                 logger.info("Attempting to import ScheduledJob from extras.models...")
                 from extras.models import ScheduledJob
@@ -855,7 +855,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         # If form invalid, reload page with errors
         try:
-            from core.models import ScheduledJob
+            from core.models.jobs import ScheduledJob
             from .jobs import MerakiSyncJob
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(job_class=job_class_path).order_by('-created')
@@ -877,7 +877,7 @@ class ScheduledSyncDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View)
     
     def post(self, request, pk):
         try:
-            from core.models import ScheduledJob
+            from core.models.jobs import ScheduledJob
             
             job = get_object_or_404(ScheduledJob, pk=pk)
             job_name = job.name
@@ -899,7 +899,7 @@ class ScheduledSyncToggleView(LoginRequiredMixin, PermissionRequiredMixin, View)
     
     def post(self, request, pk):
         try:
-            from core.models import ScheduledJob
+            from core.models.jobs import ScheduledJob
             
             job = get_object_or_404(ScheduledJob, pk=pk)
             job.enabled = not job.enabled
