@@ -79,6 +79,7 @@
                         </div>
 
                         <div class="mb-3" id="network-select-container" style="display: none;">
+                            <label class="form-label"><strong>Networks</strong></label>
                             <div class="form-check mb-2">
                                 {{ form.sync_all_networks }}
                                 <label class="form-check-label" for="sync_all_networks_scheduled">
@@ -86,18 +87,20 @@
                                 </label>
                             </div>
                             <div id="network-list-container" style="display: none;">
-                                <label for="id_network_ids" class="form-label">Select Networks</label>
-                                {{ form.network_ids }}
-                                <div id="network-loading" class="text-muted text-center py-3">
-                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                    Loading networks...
+                                <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                    <div id="network-list-scheduled" class="mb-0">
+                                        <div class="text-muted text-center py-3">
+                                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                            Loading networks...
+                                        </div>
+                                    </div>
                                 </div>
                                 <div id="selected-network-count-scheduled" style="display: none; margin-top: 8px;">
                                     <span class="badge" style="background-color: #198754; color: #fff; font-weight: 600;">
                                         <i class="mdi mdi-checkbox-marked-circle"></i> <span id="selected-count-scheduled">0</span> selected
                                     </span>
                                 </div>
-                                <small class="form-text text-muted">{{ form.network_ids.help_text }}</small>
+                                <small class="form-text text-muted">Select specific networks to sync</small>
                             </div>
                         </div>
 
@@ -232,8 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const networkSelectContainer = document.getElementById('network-select-container');
     const syncAllCheckbox = document.getElementById('sync_all_networks_scheduled');
     const networkListContainer = document.getElementById('network-list-container');
-    const networkSelect = document.getElementById('id_network_ids');
-    const networkLoading = document.getElementById('network-loading');
+    const networkList = document.getElementById('network-list-scheduled');
     
     function toggleCustomInterval() {
         if (intervalSelect.value === 'custom') {
@@ -278,30 +280,69 @@ document.addEventListener('DOMContentLoaded', function() {
     function loadNetworks(orgId) {
         if (!orgId) return;
         
-        networkLoading.style.display = 'block';
-        networkSelect.style.display = 'none';
+        // Show loading state
+        networkList.innerHTML = '<div class="text-muted text-center py-3"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading networks...</div>';
+        networkListContainer.style.display = 'none';
         
         fetch(`{% url 'plugins:netbox_meraki:get_networks' org_id=0 %}`.replace('/0/', `/${orgId}/`))
             .then(response => response.json())
             .then(data => {
-                // Clear existing options
-                networkSelect.innerHTML = '';
-                
-                // Add network options
-                if (data.networks && data.networks.length > 0) {
-                    data.networks.forEach(network => {
-                        const option = document.createElement('option');
-                        option.value = network.id;
-                        option.textContent = network.name;
-                        networkSelect.appendChild(option);
-                    });
+                if (data.error) {
+                    networkList.innerHTML = `
+                        <div class="alert alert-danger mb-0">
+                            <strong>Error:</strong> ${data.error}
+                        </div>
+                    `;
+                    networkListContainer.style.display = 'block';
+                    return;
                 }
                 
-                networkLoading.style.display = 'none';
+                const networks = data.networks || [];
+                
+                if (networks.length === 0) {
+                    networkList.innerHTML = '<div class="text-muted text-center py-3">No networks found in this organization</div>';
+                    networkListContainer.style.display = 'block';
+                    return;
+                }
+                
+                // Build network checkboxes with details
+                let html = '';
+                networks.forEach(network => {
+                    const productTypes = network.productTypes ? network.productTypes.join(', ') : 'Unknown';
+                    const tags = network.tags && network.tags.length > 0 
+                        ? `<span class="badge bg-secondary ms-2">${network.tags.join(', ')}</span>`
+                        : '';
+                    
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input network-checkbox" type="checkbox" 
+                                   name="network_ids" value="${network.id}" id="network_${network.id}">
+                            <label class="form-check-label" for="network_${network.id}">
+                                <strong>${network.name}</strong>
+                                <small class="text-muted ms-2">(${productTypes})</small>
+                                ${tags}
+                            </label>
+                        </div>
+                    `;
+                });
+                
+                networkList.innerHTML = html;
+                
+                // Add event listeners to checkboxes
+                document.querySelectorAll('.network-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', updateSelectedCount);
+                });
+                
+                networkListContainer.style.display = 'block';
             })
             .catch(error => {
                 console.error('Error loading networks:', error);
-                networkLoading.style.display = 'none';
+                networkList.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        <strong>Error:</strong> Failed to load networks. Please try again.
+                    </div>
+                `;
+                networkListContainer.style.display = 'block';
             });
     }
     
@@ -310,13 +351,12 @@ document.addEventListener('DOMContentLoaded', function() {
             networkListContainer.style.display = 'none';
         } else {
             networkListContainer.style.display = 'block';
-            networkSelect.style.display = 'block';
         }
     }
     
     function updateSelectedCount() {
-        const selectedOptions = Array.from(networkSelect.selectedOptions);
-        const count = selectedOptions.length;
+        const selectedCheckboxes = document.querySelectorAll('.network-checkbox:checked');
+        const count = selectedCheckboxes.length;
         const countBadge = document.getElementById('selected-network-count-scheduled');
         const countSpan = document.getElementById('selected-count-scheduled');
         
@@ -334,10 +374,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (syncAllCheckbox) {
         syncAllCheckbox.addEventListener('change', toggleNetworkList);
         toggleNetworkList();
-    }
-    
-    if (networkSelect) {
-        networkSelect.addEventListener('change', updateSelectedCount);
     }
     
     toggleCustomInterval();

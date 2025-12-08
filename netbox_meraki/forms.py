@@ -67,12 +67,10 @@ class ScheduledSyncForm(forms.Form):
     network_ids = forms.MultipleChoiceField(
         required=False,
         choices=[],
-        widget=forms.SelectMultiple(attrs={
-            'class': 'form-select',
-            'size': '10',
-            'style': 'display: none;'
+        widget=forms.CheckboxSelectMultiple(attrs={
+            'style': 'display: none;'  # Hidden, we build checkboxes dynamically in JavaScript
         }),
-        help_text='Optional: Specific networks to sync (leave empty for all networks in organization)'
+        help_text='Optional: Specific networks to sync'
     )
     
     sync_all_networks = forms.BooleanField(

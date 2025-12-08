@@ -118,7 +118,7 @@ class SyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def post(self, request):
         sync_mode = request.POST.get('sync_mode', 'review')
         organization_id = request.POST.get('organization_id', '')
-        network_ids = request.POST.getlist('network_ids[]')
+        network_ids = request.POST.getlist('network_ids')
         sync_all_networks = request.POST.get('sync_all_networks') == 'true'
         
         try:
@@ -797,11 +797,11 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 if form.cleaned_data.get('organization_id'):
                     job_kwargs['organization_id'] = form.cleaned_data['organization_id']
                 
-                # Handle network selection
-                network_ids = form.cleaned_data.get('network_ids')
+                # Handle network selection - get from POST directly since we build checkboxes dynamically
+                network_ids = request.POST.getlist('network_ids')
                 sync_all_networks = form.cleaned_data.get('sync_all_networks', True)
                 if network_ids and not sync_all_networks:
-                    job_kwargs['network_ids'] = list(network_ids)
+                    job_kwargs['network_ids'] = network_ids
                 
                 # Use enqueue_once() for scheduled jobs or enqueue() for run once
                 if interval_minutes is None:
