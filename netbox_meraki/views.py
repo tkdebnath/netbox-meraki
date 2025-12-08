@@ -803,26 +803,44 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 if network_ids and not sync_all_networks:
                     job_kwargs['network_ids'] = network_ids
                 
+                # Get scheduled time if provided
+                scheduled_time = form.cleaned_data.get('scheduled_time')
+                
                 # Use enqueue_once() for scheduled jobs or enqueue() for run once
                 if interval_minutes is None:
-                    # Run once immediately
-                    job = MerakiSyncJob.enqueue(
-                        name=form.cleaned_data['name'],
-                        user=request.user,
+                    # Run once immediately or at scheduled time
+                    enqueue_kwargs = {
+                        'name': form.cleaned_data['name'],
+                        'user': request.user,
                         **job_kwargs
-                    )
-                    messages.success(
-                        request,
-                        f'Job "{form.cleaned_data["name"]}" queued successfully and will run immediately.'
-                    )
+                    }
+                    if scheduled_time:
+                        enqueue_kwargs['schedule_at'] = scheduled_time
+                    
+                    job = MerakiSyncJob.enqueue(**enqueue_kwargs)
+                    
+                    if scheduled_time:
+                        messages.success(
+                            request,
+                            f'Job "{form.cleaned_data["name"]}" scheduled to run at {scheduled_time.strftime("%Y-%m-%d %H:%M")}.'
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            f'Job "{form.cleaned_data["name"]}" queued successfully and will run immediately.'
+                        )
                 else:
                     # Schedule recurring job
-                    job = MerakiSyncJob.enqueue_once(
-                        interval=interval_minutes,
-                        name=form.cleaned_data['name'],
-                        user=request.user,
+                    enqueue_kwargs = {
+                        'interval': interval_minutes,
+                        'name': form.cleaned_data['name'],
+                        'user': request.user,
                         **job_kwargs
-                    )
+                    }
+                    if scheduled_time:
+                        enqueue_kwargs['schedule_at'] = scheduled_time
+                    
+                    job = MerakiSyncJob.enqueue_once(**enqueue_kwargs)
                     
                     # Build description for the job
                     mode_label = form.cleaned_data['sync_mode'].replace('_', ' ').title()
@@ -840,11 +858,13 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                             scheduled_job.enabled = form.cleaned_data['enabled']
                             scheduled_job.save()
                     
-                    messages.success(
-                        request,
-                        f'Scheduled job "{form.cleaned_data["name"]}" created successfully. '
-                        f'Runs every {interval_minutes} minutes.'
-                    )
+                    # Build success message
+                    success_msg = f'Scheduled job "{form.cleaned_data["name"]}" created successfully. '
+                    if scheduled_time:
+                        success_msg += f'First run: {scheduled_time.strftime("%Y-%m-%d %H:%M")}. '
+                    success_msg += f'Runs every {interval_minutes} minutes.'
+                    
+                    messages.success(request, success_msg)
                 
                 return redirect('plugins:netbox_meraki:scheduled_sync')
                 

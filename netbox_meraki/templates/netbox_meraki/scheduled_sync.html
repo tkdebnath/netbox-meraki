@@ -56,6 +56,15 @@
                         </div>
 
                         <div class="mb-3">
+                            <label for="scheduled_time" class="form-label">Start Date & Time (Optional)</label>
+                            {{ form.scheduled_time }}
+                            {% if form.scheduled_time.errors %}
+                                <div class="invalid-feedback d-block">{{ form.scheduled_time.errors.0 }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.scheduled_time.help_text }}</small>
+                        </div>
+
+                        <div class="mb-3">
                             <label for="id_sync_mode" class="form-label">Sync Mode *</label>
                             {{ form.sync_mode }}
                             {% if form.sync_mode.errors %}

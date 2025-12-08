@@ -1,6 +1,7 @@
 """Forms for NetBox Meraki plugin"""
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from .models import PluginSettings, SiteNameRule, PrefixFilterRule
 
 
@@ -41,6 +42,16 @@ class ScheduledSyncForm(forms.Form):
             'min': '5'
         }),
         help_text='Custom interval in minutes (minimum 5)'
+    )
+    
+    scheduled_time = forms.DateTimeField(
+        required=False,
+        widget=forms.DateTimeInput(attrs={
+            'class': 'form-control',
+            'type': 'datetime-local',
+            'id': 'scheduled_time'
+        }),
+        help_text='Optional: Specific date and time to start (leave empty to start immediately)'
     )
     
     sync_mode = forms.ChoiceField(
