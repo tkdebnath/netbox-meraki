@@ -34,6 +34,8 @@ class MerakiConfig(PluginConfig):
     
     def ready(self):
         super().ready()
+        # Import jobs to register JobRunner classes
+        from . import jobs
 
 
 config = MerakiConfig

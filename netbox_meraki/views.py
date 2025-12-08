@@ -695,21 +695,14 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         try:
             from core.models import ScheduledJob
-        except ImportError:
-            messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher. Please upgrade NetBox or use manual sync.')
-            form = ScheduledSyncForm()
-            context = {
-                'form': form,
-                'scheduled_jobs': [],
-            }
-            return render(request, 'netbox_meraki/scheduled_sync.html', context)
-        
-        try:
             from .jobs import MerakiSyncJob
+            
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(
                 job_class=job_class_path
             ).order_by('-created')
+        except ImportError:
+            messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher. Please upgrade NetBox or use manual sync.')
         except Exception as e:
             logger.error(f"Error fetching scheduled jobs: {e}")
             messages.warning(request, f'Error loading scheduled jobs: {str(e)}')
@@ -728,12 +721,6 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         if form.is_valid():
             try:
-                from core.models import ScheduledJob
-            except ImportError:
-                messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher.')
-                return redirect('plugins:netbox_meraki:sync')
-            
-            try:
                 from .jobs import MerakiSyncJob
                 
                 # Get interval
@@ -751,35 +738,39 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 if form.cleaned_data.get('organization_id'):
                     job_kwargs['organization_id'] = form.cleaned_data['organization_id']
                 
-                # Create scheduled job
-                job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
-                
-                # Create job without data field (NetBox handles job_kwargs differently)
-                scheduled_job = ScheduledJob.objects.create(
-                    name=form.cleaned_data['name'],
-                    job_class=job_class_path,
+                # Use enqueue_once() to schedule the job properly
+                # This creates a ScheduledJob and ensures no duplicates
+                job = MerakiSyncJob.enqueue_once(
                     interval=interval_minutes,
-                    enabled=form.cleaned_data['enabled'],
-                    user=request.user
+                    name=form.cleaned_data['name'],
+                    user=request.user,
+                    **job_kwargs
                 )
                 
-                # Store sync configuration in job name for reference
-                if job_kwargs:
-                    mode_label = form.cleaned_data['sync_mode'].replace('_', ' ').title()
-                    scheduled_job.description = f"Mode: {mode_label}"
-                    if job_kwargs.get('organization_id'):
-                        scheduled_job.description += f" | Org: {job_kwargs['organization_id']}"
-                    scheduled_job.save()
+                # Build description for the job
+                mode_label = form.cleaned_data['sync_mode'].replace('_', ' ').title()
+                description = f"Mode: {mode_label}"
+                if job_kwargs.get('organization_id'):
+                    description += f" | Org: {job_kwargs['organization_id']}"
+                
+                # Update scheduled job properties
+                if job:
+                    scheduled_job = job.scheduled_job
+                    if scheduled_job:
+                        scheduled_job.description = description
+                        scheduled_job.enabled = form.cleaned_data['enabled']
+                        scheduled_job.save()
                 
                 messages.success(
                     request,
-                    f'Scheduled job "{scheduled_job.name}" created successfully. '
+                    f'Scheduled job "{form.cleaned_data["name"]}" created successfully. '
                     f'Runs every {interval_minutes} minutes.'
                 )
                 return redirect('plugins:netbox_meraki:scheduled_sync')
                 
             except ImportError:
-                messages.error(request, 'NetBox ScheduledJob model not available. Ensure you are running NetBox 4.0+')
+                messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher.')
+                return redirect('plugins:netbox_meraki:sync')
             except Exception as e:
                 messages.error(request, f'Failed to create scheduled job: {str(e)}')
                 logger.error(f"Failed to create scheduled job: {e}", exc_info=True)
