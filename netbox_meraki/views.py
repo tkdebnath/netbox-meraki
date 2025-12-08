@@ -896,6 +896,14 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return render(request, 'netbox_meraki/scheduled_sync.html', context)
     
     def post(self, request):
+        # DEBUG: Log raw POST data
+        logger.info("=" * 80)
+        logger.info("SCHEDULED SYNC FORM SUBMISSION")
+        logger.info("=" * 80)
+        logger.info(f"POST data: {dict(request.POST)}")
+        logger.info(f"network_ids from getlist: {request.POST.getlist('network_ids')}")
+        logger.info(f"sync_all_networks: {request.POST.get('sync_all_networks')}")
+        
         # Fetch organizations for form validation
         organizations = []
         try:
@@ -910,6 +918,8 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         logger.info(f"Form is_valid: {form.is_valid()}")
         if not form.is_valid():
             logger.error(f"Form validation errors: {form.errors}")
+        else:
+            logger.info(f"Form cleaned_data: {form.cleaned_data}")
         
         if form.is_valid():
             try:
