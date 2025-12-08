@@ -4,6 +4,13 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+def create_default_settings(apps, schema_editor):
+    """Create default PluginSettings instance"""
+    PluginSettings = apps.get_model('netbox_meraki', 'PluginSettings')
+    if not PluginSettings.objects.exists():
+        PluginSettings.objects.create(id=1)
+
+
 class Migration(migrations.Migration):
 
     initial = True
@@ -12,6 +19,36 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Drop existing tables if they exist (for clean reinstall)
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_reviewitem CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_syncreview CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_scheduledsynctask CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_synclog CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_prefixfilterrule CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_sitenamerule CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_pluginsettings CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        
         # PluginSettings Model
         migrations.CreateModel(
             name='PluginSettings',
@@ -173,4 +210,7 @@ class Migration(migrations.Migration):
                 'ordering': ['item_type', 'object_name'],
             },
         ),
+        
+        # Create default PluginSettings instance
+        migrations.RunPython(create_default_settings, migrations.RunPython.noop),
     ]
