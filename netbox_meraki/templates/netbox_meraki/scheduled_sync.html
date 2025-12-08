@@ -379,8 +379,16 @@ document.addEventListener('DOMContentLoaded', function() {
         if (count > 0) {
             countSpan.textContent = count;
             countBadge.style.display = 'block';
+            // Auto-uncheck "sync all networks" when specific networks are selected
+            if (syncAllCheckbox) {
+                syncAllCheckbox.checked = false;
+            }
         } else {
             countBadge.style.display = 'none';
+            // Auto-check "sync all networks" when no networks are selected
+            if (syncAllCheckbox) {
+                syncAllCheckbox.checked = true;
+            }
         }
     }
     
