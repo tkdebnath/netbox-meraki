@@ -1,6 +1,7 @@
 """Forms for NetBox Meraki plugin"""
 from django import forms
-from .models import PluginSettings, SiteNameRule, PrefixFilterRule, ScheduledSyncTask
+from django.core.exceptions import ValidationError
+from .models import PluginSettings, SiteNameRule, PrefixFilterRule
 
 
 class PluginSettingsForm(forms.ModelForm):
