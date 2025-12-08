@@ -943,21 +943,38 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                         logger.warning("Network IDs list is empty after filtering, will sync all networks")
                 # If sync_all_networks is True or no valid network IDs, don't add network_ids (means sync all)
                 
+                # Debug logging
+                logger.info(f"=== DEBUG: Job kwargs prepared ===")
+                logger.info(f"sync_mode: {job_kwargs.get('sync_mode')}")
+                logger.info(f"organization_id: {job_kwargs.get('organization_id')}")
+                logger.info(f"network_ids: {job_kwargs.get('network_ids')}")
+                logger.info(f"network_ids type: {type(job_kwargs.get('network_ids'))}")
+                
                 # Get scheduled time if provided
                 scheduled_time = form.cleaned_data.get('scheduled_time')
                 
                 # Use enqueue_once() for scheduled jobs or enqueue() for run once
                 if interval_minutes is None:
                     # Run once immediately or at scheduled time
+                    # Pass sync parameters directly as kwargs (not nested)
                     enqueue_kwargs = {
                         'name': form.cleaned_data['name'],
                         'user': request.user,
-                        **job_kwargs
+                        **job_kwargs  # Unpack job_kwargs directly into enqueue call
                     }
                     if scheduled_time:
                         enqueue_kwargs['schedule_at'] = scheduled_time
                     
-                    job = MerakiSyncJob.enqueue(**enqueue_kwargs)
+                    logger.info(f"Calling enqueue with: {enqueue_kwargs}")
+                    try:
+                        job = MerakiSyncJob.enqueue(**enqueue_kwargs)
+                    except TypeError as te:
+                        logger.error(f"TypeError during enqueue: {te}", exc_info=True)
+                        logger.error(f"enqueue_kwargs: {enqueue_kwargs}")
+                        raise
+                    except Exception as e:
+                        logger.error(f"Unexpected error during enqueue: {e}", exc_info=True)
+                        raise
                     
                     if scheduled_time:
                         messages.success(
@@ -971,16 +988,26 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                         )
                 else:
                     # Schedule recurring job
+                    # Pass sync parameters directly as kwargs (not nested)
                     enqueue_kwargs = {
                         'interval': interval_minutes,
                         'name': form.cleaned_data['name'],
                         'user': request.user,
-                        **job_kwargs
+                        **job_kwargs  # Unpack job_kwargs directly into enqueue_once call
                     }
                     if scheduled_time:
                         enqueue_kwargs['schedule_at'] = scheduled_time
                     
-                    job = MerakiSyncJob.enqueue_once(**enqueue_kwargs)
+                    logger.info(f"Calling enqueue_once with: {enqueue_kwargs}")
+                    try:
+                        job = MerakiSyncJob.enqueue_once(**enqueue_kwargs)
+                    except TypeError as te:
+                        logger.error(f"TypeError during enqueue_once: {te}", exc_info=True)
+                        logger.error(f"enqueue_kwargs: {enqueue_kwargs}")
+                        raise
+                    except Exception as e:
+                        logger.error(f"Unexpected error during enqueue_once: {e}", exc_info=True)
+                        raise
                     
                     # Build description for the job
                     mode_label = form.cleaned_data['sync_mode'].replace('_', ' ').title()

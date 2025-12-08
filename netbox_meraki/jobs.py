@@ -23,10 +23,13 @@ class MerakiSyncJob(JobRunner):
     network_ids = None  # Optional: list of network IDs for selective sync
     
     def run(self, *args, **kwargs):
-        # Get parameters from job data if provided
-        sync_mode = kwargs.get('sync_mode') or self.sync_mode
-        organization_id = kwargs.get('organization_id') or self.organization_id
-        network_ids = kwargs.get('network_ids') or self.network_ids
+        # NetBox passes job parameters as 'job_kwargs' dict or directly in kwargs
+        job_data = kwargs.get('job_kwargs', {})
+        
+        # Get parameters from job_kwargs first, then fall back to direct kwargs, then class attributes
+        sync_mode = job_data.get('sync_mode') or kwargs.get('sync_mode') or self.sync_mode
+        organization_id = job_data.get('organization_id') or kwargs.get('organization_id') or self.organization_id
+        network_ids = job_data.get('network_ids') or kwargs.get('network_ids') or self.network_ids
         
         # If no sync_mode provided, use PluginSettings default
         if not sync_mode:
@@ -35,6 +38,7 @@ class MerakiSyncJob(JobRunner):
         
         self.logger.info(f"Starting Meraki sync (mode: {sync_mode})")
         self.logger.info(f"Job kwargs received: {kwargs}")
+        self.logger.info(f"Job data extracted: sync_mode={sync_mode}, org={organization_id}, networks={network_ids}")
         if organization_id:
             self.logger.info(f"Organization filter: {organization_id}")
         if network_ids:
