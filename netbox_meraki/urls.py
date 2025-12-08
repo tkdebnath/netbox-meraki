@@ -27,7 +27,7 @@ urlpatterns = [
     path('api/sync/<int:pk>/progress/', views.SyncProgressAPIView.as_view(), name='sync_progress_api'),
     path('api/sync/<int:pk>/cancel/', views.SyncCancelAPIView.as_view(), name='sync_cancel_api'),
     path('api/sync/<int:pk>/status/', views.get_sync_progress, name='sync_status_api'),
-    path('api/networks/<str:org_id>/', views.get_networks_for_org, name='get_networks_for_org'),
+    path('api/networks/<str:org_id>/', views.get_networks_for_org, name='get_networks'),
     path('api/organizations/', views.get_organizations, name='get_organizations'),
     
     path('scheduled-sync/', views.ScheduledSyncView.as_view(), name='scheduled_sync'),

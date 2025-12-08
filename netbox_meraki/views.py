@@ -691,19 +691,28 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'extras.view_scheduledjob'
     
     def get(self, request):
+        scheduled_jobs = []
+        
         try:
             from core.models import ScheduledJob
+        except ImportError:
+            messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher. Please upgrade NetBox or use manual sync.')
+            form = ScheduledSyncForm()
+            context = {
+                'form': form,
+                'scheduled_jobs': [],
+            }
+            return render(request, 'netbox_meraki/scheduled_sync.html', context)
+        
+        try:
             from .jobs import MerakiSyncJob
-            
-            # Get all scheduled Meraki sync jobs
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(
                 job_class=job_class_path
             ).order_by('-created')
-            
-        except ImportError:
-            scheduled_jobs = []
-            messages.warning(request, 'NetBox ScheduledJob model not available. Ensure you are running NetBox 4.0+')
+        except Exception as e:
+            logger.error(f"Error fetching scheduled jobs: {e}")
+            messages.warning(request, f'Error loading scheduled jobs: {str(e)}')
         
         form = ScheduledSyncForm()
         
@@ -720,6 +729,11 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if form.is_valid():
             try:
                 from core.models import ScheduledJob
+            except ImportError:
+                messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher.')
+                return redirect('plugins:netbox_meraki:sync')
+            
+            try:
                 from .jobs import MerakiSyncJob
                 
                 # Get interval

@@ -8,6 +8,7 @@ class MerakiConfig(PluginConfig):
     version = '1.0.1'
     author = 'Tarani Debnath'
     base_url = 'meraki'
+    min_version = '4.0.0'
     required_settings = []
     default_settings = {
         'meraki_api_key': '',
