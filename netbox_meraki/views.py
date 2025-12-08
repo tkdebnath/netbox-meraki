@@ -692,13 +692,16 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     
     def get(self, request):
         import sys
+        import uuid
+        request_id = str(uuid.uuid4())[:8]
+        
         sys.stderr.write("=" * 80 + "\n")
-        sys.stderr.write("SCHEDULED SYNC VIEW - GET METHOD CALLED\n")
+        sys.stderr.write(f"SCHEDULED SYNC VIEW - GET METHOD CALLED [Request ID: {request_id}]\n")
         sys.stderr.write("=" * 80 + "\n")
         sys.stderr.flush()
         
         print("=" * 80, file=sys.stderr)
-        print("SCHEDULED SYNC VIEW - GET METHOD CALLED", file=sys.stderr)
+        print(f"SCHEDULED SYNC VIEW - GET METHOD CALLED [Request ID: {request_id}]", file=sys.stderr)
         print("=" * 80, file=sys.stderr)
         
         scheduled_jobs = []
@@ -822,21 +825,22 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         form = ScheduledSyncForm(organizations=organizations)
         
         import sys
-        sys.stderr.write(f"FINAL STATE: can_schedule = {can_schedule}\n")
-        sys.stderr.write(f"FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}\n")
-        sys.stderr.write(f"Exception details: {exception_details}\n")
+        sys.stderr.write(f"[Request ID: {request_id}] FINAL STATE: can_schedule = {can_schedule} (type: {type(can_schedule)})\n")
+        sys.stderr.write(f"[Request ID: {request_id}] FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}\n")
+        sys.stderr.write(f"[Request ID: {request_id}] Exception details: {exception_details}\n")
         sys.stderr.write("=" * 80 + "\n")
         sys.stderr.flush()
         
-        logger.error(f"DEBUG: can_schedule = {can_schedule}")
-        logger.error(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
-        logger.error(f"DEBUG: Exception details: {exception_details}")
+        logger.error(f"[Request ID: {request_id}] DEBUG: can_schedule = {can_schedule} (type: {type(can_schedule)})")
+        logger.error(f"[Request ID: {request_id}] DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
+        logger.error(f"[Request ID: {request_id}] DEBUG: Exception details: {exception_details}")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
             'form': form,
             'can_schedule': can_schedule,
             'exception_details': exception_details,  # Pass to template for debugging
+            'request_id': request_id,  # Add request ID to template
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)

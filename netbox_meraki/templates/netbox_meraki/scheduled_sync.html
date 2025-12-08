@@ -16,7 +16,7 @@
                 <div class="card-body">
                     <!-- VISIBLE DEBUG: can_schedule={{ can_schedule }} type={{ can_schedule|default:"NONE" }} -->
                     <div style="background: yellow; padding: 10px; border: 2px solid red; margin-bottom: 10px;">
-                        <strong>DEBUG:</strong> can_schedule = "{{ can_schedule }}" | Type: {{ can_schedule|default:"NONE" }} | Not can_schedule: {% if not can_schedule %}TRUE{% else %}FALSE{% endif %}
+                        <strong>DEBUG [Request: {{ request_id }}]:</strong> can_schedule = "{{ can_schedule }}" | Type: {{ can_schedule|default:"NONE" }} | Not can_schedule: {% if not can_schedule %}TRUE{% else %}FALSE{% endif %}
                     </div>
                     {% if not can_schedule %}
                     <div class="alert" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; padding: 15px; border-radius: 5px;">
