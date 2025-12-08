@@ -1,0 +1,230 @@
+{% extends 'base/layout.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1>Job History</h1>
+    <p class="text-muted">All sync jobs (manual and scheduled) with filtering and pagination.</p>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">{{ stats.total }}</h5>
+                    <p class="card-text text-muted">Total Jobs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center" style="border-left: 4px solid #198754;">
+                <div class="card-body">
+                    <h5 class="card-title text-success">{{ stats.success }}</h5>
+                    <p class="card-text text-muted">Success</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center" style="border-left: 4px solid #ffc107;">
+                <div class="card-body">
+                    <h5 class="card-title text-warning">{{ stats.pending_review }}</h5>
+                    <p class="card-text text-muted">Pending Review</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center" style="border-left: 4px solid #0dcaf0;">
+                <div class="card-body">
+                    <h5 class="card-title text-info">{{ stats.running }}</h5>
+                    <p class="card-text text-muted">Running</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center" style="border-left: 4px solid #fd7e14;">
+                <div class="card-body">
+                    <h5 class="card-title" style="color: #fd7e14;">{{ stats.partial }}</h5>
+                    <p class="card-text text-muted">Partial</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card text-center" style="border-left: 4px solid #dc3545;">
+                <div class="card-body">
+                    <h5 class="card-title text-danger">{{ stats.failed }}</h5>
+                    <p class="card-text text-muted">Failed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <strong><i class="mdi mdi-filter"></i> Filters</strong>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="all" {% if not status_filter or status_filter == 'all' %}selected{% endif %}>All</option>
+                        <option value="success" {% if status_filter == 'success' %}selected{% endif %}>Success</option>
+                        <option value="pending_review" {% if status_filter == 'pending_review' %}selected{% endif %}>Pending Review</option>
+                        <option value="running" {% if status_filter == 'running' %}selected{% endif %}>Running</option>
+                        <option value="partial" {% if status_filter == 'partial' %}selected{% endif %}>Partial</option>
+                        <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                        <option value="dry_run" {% if status_filter == 'dry_run' %}selected{% endif %}>Dry Run</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Mode</label>
+                    <select name="mode" class="form-select">
+                        <option value="all" {% if not mode_filter or mode_filter == 'all' %}selected{% endif %}>All</option>
+                        <option value="auto" {% if mode_filter == 'auto' %}selected{% endif %}>Auto</option>
+                        <option value="review" {% if mode_filter == 'review' %}selected{% endif %}>Review</option>
+                        <option value="dry_run" {% if mode_filter == 'dry_run' %}selected{% endif %}>Dry Run</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">From Date</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">To Date</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Per Page</label>
+                    <select name="per_page" class="form-select">
+                        <option value="10" {% if per_page == 10 %}selected{% endif %}>10</option>
+                        <option value="25" {% if per_page == 25 %}selected{% endif %}>25</option>
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="mdi mdi-filter"></i> Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Job History Table -->
+    <div class="card">
+        <div class="card-header">
+            <strong><i class="mdi mdi-history"></i> Job History</strong>
+            <span class="badge bg-secondary float-end">{{ logs.paginator.count }} total jobs</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Status</th>
+                        <th>Mode</th>
+                        <th>Organizations</th>
+                        <th>Networks</th>
+                        <th>Devices</th>
+                        <th>VLANs</th>
+                        <th>Prefixes</th>
+                        <th>Duration</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.timestamp|date:"Y-m-d H:i:s" }}</td>
+                        <td>
+                            {% if log.status == 'success' %}
+                                <span class="badge" style="background-color: #198754; color: #fff; font-weight: 600;">SUCCESS</span>
+                            {% elif log.status == 'pending_review' %}
+                                <span class="badge" style="background-color: #ffc107; color: #000; font-weight: 700;">PENDING_REVIEW</span>
+                            {% elif log.status == 'running' %}
+                                <span class="badge" style="background-color: #0dcaf0; color: #000; font-weight: 700;">RUNNING</span>
+                            {% elif log.status == 'partial' %}
+                                <span class="badge" style="background-color: #fd7e14; color: #fff; font-weight: 600;">PARTIAL</span>
+                            {% elif log.status == 'failed' %}
+                                <span class="badge" style="background-color: #dc3545; color: #fff; font-weight: 600;">FAILED</span>
+                            {% elif log.status == 'dry_run' %}
+                                <span class="badge" style="background-color: #6c757d; color: #fff; font-weight: 600;">DRY_RUN</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ log.status|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ log.sync_mode|default:"N/A"|upper }}</span>
+                        </td>
+                        <td>{{ log.organizations_synced|default:"0" }}</td>
+                        <td>{{ log.networks_synced|default:"0" }}</td>
+                        <td>{{ log.devices_synced|default:"0" }}</td>
+                        <td>{{ log.vlans_synced|default:"0" }}</td>
+                        <td>{{ log.prefixes_synced|default:"0" }}</td>
+                        <td>
+                            {% if log.duration_seconds %}
+                                {{ log.duration_seconds|floatformat:2 }}s
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'plugins:netbox_meraki:synclog' pk=log.pk %}" class="btn btn-sm btn-primary">
+                                <i class="mdi mdi-eye"></i> View Details
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted">No jobs found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if logs.has_other_pages %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if logs.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% if status_filter %}&status={{ status_filter }}{% endif %}{% if mode_filter %}&mode={{ mode_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&per_page={{ per_page }}">
+                                &laquo; First
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ logs.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if mode_filter %}&mode={{ mode_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&per_page={{ per_page }}">
+                                Previous
+                            </a>
+                        </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">
+                            Page {{ logs.number }} of {{ logs.paginator.num_pages }}
+                        </span>
+                    </li>
+
+                    {% if logs.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ logs.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if mode_filter %}&mode={{ mode_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&per_page={{ per_page }}">
+                                Next
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ logs.paginator.num_pages }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if mode_filter %}&mode={{ mode_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&per_page={{ per_page }}">
+                                Last &raquo;
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

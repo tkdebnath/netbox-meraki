@@ -224,9 +224,32 @@ class MerakiSyncService:
                 status = 'dry_run'
                 message = f"Dry run completed - {self.review.items_total if self.review else 0} items would be modified"
             elif self.sync_mode == 'review':
-                status = 'pending_review'
-                message = f"Review ready - {self.review.items_total if self.review else 0} items pending approval"
-            else:
+                # Check if review has any pending items
+                if self.review:
+                    pending_count = self.review.items.filter(status='pending').count()
+                    approved_count = self.review.items.filter(status='approved').count()
+                    rejected_count = self.review.items.filter(status='rejected').count()
+                    applied_count = self.review.items.filter(status='applied').count()
+                    
+                    if pending_count > 0:
+                        status = 'pending_review'
+                        message = f"Review ready - {pending_count} items pending approval"
+                    elif applied_count > 0 and rejected_count > 0:
+                        status = 'partial'
+                        message = f"Partially completed - {applied_count} applied, {rejected_count} rejected"
+                    elif applied_count > 0:
+                        status = 'success'
+                        message = f"Review completed - {applied_count} items applied"
+                    elif rejected_count > 0:
+                        status = 'success'
+                        message = f"Review completed - {rejected_count} items rejected"
+                    else:
+                        status = 'success'
+                        message = f"Sync completed - all items processed"
+                else:
+                    status = 'success'
+                    message = f"Sync completed"
+            else:  # auto mode
                 status = 'success' if not self.errors else 'partial' if self.stats['devices'] > 0 else 'failed'
                 message = f"Synchronized {self.stats['organizations']} organizations"
             

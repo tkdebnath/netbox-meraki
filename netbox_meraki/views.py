@@ -29,6 +29,22 @@ class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         recent_logs = SyncLog.objects.all()[:10]
         
+        # For logs with status='pending_review', check if review actually has pending items
+        for log in recent_logs:
+            if log.status == 'pending_review':
+                # Check if review exists and has pending items
+                from .models import SyncReview
+                try:
+                    review = SyncReview.objects.get(sync_log=log)
+                    pending_count = review.items.filter(status='pending').count()
+                    if pending_count == 0:
+                        # No pending items, update status to completed
+                        log.status = 'success'
+                        log.message = f"Review completed - {review.items.count()} items processed"
+                        log.save()
+                except SyncReview.DoesNotExist:
+                    pass
+        
         latest_sync = SyncLog.objects.filter(status='success').first()
         
         # Get running syncs
@@ -685,6 +701,87 @@ def get_sync_progress(request, pk):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+class JobHistoryView(LoginRequiredMixin, View):
+    """View for displaying all sync jobs (manual and scheduled) with pagination"""
+    
+    def get(self, request):
+        from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+        
+        # Get all sync logs ordered by most recent first
+        all_logs = SyncLog.objects.all().order_by('-timestamp')
+        
+        # Apply filters if provided
+        status_filter = request.GET.get('status')
+        mode_filter = request.GET.get('mode')
+        date_from = request.GET.get('date_from')
+        date_to = request.GET.get('date_to')
+        
+        if status_filter and status_filter != 'all':
+            all_logs = all_logs.filter(status=status_filter)
+        
+        if mode_filter and mode_filter != 'all':
+            all_logs = all_logs.filter(sync_mode=mode_filter)
+        
+        if date_from:
+            try:
+                from_date = datetime.strptime(date_from, '%Y-%m-%d')
+                all_logs = all_logs.filter(timestamp__gte=from_date)
+            except ValueError:
+                pass
+        
+        if date_to:
+            try:
+                to_date = datetime.strptime(date_to, '%Y-%m-%d')
+                # Add one day to include the entire end date
+                to_date = to_date + timedelta(days=1)
+                all_logs = all_logs.filter(timestamp__lt=to_date)
+            except ValueError:
+                pass
+        
+        # Pagination
+        page = request.GET.get('page', 1)
+        per_page = request.GET.get('per_page', 25)
+        
+        try:
+            per_page = int(per_page)
+            if per_page not in [10, 25, 50, 100]:
+                per_page = 25
+        except ValueError:
+            per_page = 25
+        
+        paginator = Paginator(all_logs, per_page)
+        
+        try:
+            logs = paginator.page(page)
+        except PageNotAnInteger:
+            logs = paginator.page(1)
+        except EmptyPage:
+            logs = paginator.page(paginator.num_pages)
+        
+        # Get statistics
+        stats = {
+            'total': all_logs.count(),
+            'success': all_logs.filter(status='success').count(),
+            'failed': all_logs.filter(status='failed').count(),
+            'pending_review': all_logs.filter(status='pending_review').count(),
+            'running': all_logs.filter(status='running').count(),
+            'partial': all_logs.filter(status='partial').count(),
+            'dry_run': all_logs.filter(status='dry_run').count(),
+        }
+        
+        context = {
+            'logs': logs,
+            'stats': stats,
+            'status_filter': status_filter,
+            'mode_filter': mode_filter,
+            'date_from': date_from,
+            'date_to': date_to,
+            'per_page': per_page,
+        }
+        
+        return render(request, 'netbox_meraki/job_history.html', context)
+
+
 class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """View for managing scheduled syncs using NetBox's native ScheduledJob"""
     
@@ -835,7 +932,8 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 network_ids = request.POST.getlist('network_ids')
                 sync_all_networks = form.cleaned_data.get('sync_all_networks', True)
                 if network_ids and not sync_all_networks:
-                    job_kwargs['network_ids'] = network_ids
+                    # Convert to list and filter out empty strings
+                    job_kwargs['network_ids'] = [nid for nid in network_ids if nid]
                 
                 # Get scheduled time if provided
                 scheduled_time = form.cleaned_data.get('scheduled_time')
