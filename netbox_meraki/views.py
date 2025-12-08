@@ -694,21 +694,25 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         scheduled_jobs = []
         organizations = []
         
+        # Try to import ScheduledJob - don't show error on page load, only on actual usage
+        can_schedule = False
         try:
             from core.models import ScheduledJob
             from .jobs import MerakiSyncJob
+            can_schedule = True
             
             job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
             scheduled_jobs = ScheduledJob.objects.filter(
                 job_class=job_class_path
             ).order_by('-created')
         except ImportError:
-            messages.error(request, 'Scheduled sync requires NetBox 4.0 or higher. Please upgrade NetBox or use manual sync.')
+            # Don't show error message here - user might just be browsing
+            pass
         except Exception as e:
             logger.error(f"Error fetching scheduled jobs: {e}")
             messages.warning(request, f'Error loading scheduled jobs: {str(e)}')
         
-        # Fetch organizations for dropdown
+        # Fetch organizations for dropdown even if scheduling not available
         try:
             from .sync_service import MerakiSyncService
             sync_service = MerakiSyncService()
@@ -722,6 +726,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         context = {
             'scheduled_jobs': scheduled_jobs,
             'form': form,
+            'can_schedule': can_schedule,
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)

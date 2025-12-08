@@ -14,7 +14,15 @@
                     <strong><i class="mdi mdi-plus"></i> Create Scheduled Job</strong>
                 </div>
                 <div class="card-body">
-                    <form method="post" id="schedule-form">
+                    {% if not can_schedule %}
+                    <div class="alert alert-danger">
+                        <i class="mdi mdi-alert"></i>
+                        <strong>Scheduled sync requires NetBox 4.0 or higher.</strong>
+                        <p class="mb-0">Please upgrade NetBox or use <a href="{% url 'plugins:netbox_meraki:sync' %}" class="alert-link">manual sync</a>.</p>
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post" id="schedule-form"{% if not can_schedule %} style="display: none;"{% endif %}>
                         {% csrf_token %}
                         
                         <div class="mb-3">
@@ -57,7 +65,7 @@
                             <label for="organization_id" class="form-label">Organization (Optional)</label>
                             {{ form.organization_id }}
                             <div id="network-count-badge" style="display: none; margin-top: 8px;">
-                                <span class="badge bg-info">
+                                <span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">
                                     <i class="mdi mdi-network"></i> <span id="network-count">0</span> Networks
                                 </span>
                             </div>
@@ -82,8 +90,8 @@
                                     Loading networks...
                                 </div>
                                 <div id="selected-network-count-scheduled" style="display: none; margin-top: 8px;">
-                                    <span class="badge bg-success">
-                                        <i class="mdi mdi-check-circle"></i> <span id="selected-count-scheduled">0</span> networks selected
+                                    <span class="badge" style="background-color: #198754; color: #fff; font-weight: 600;">
+                                        <i class="mdi mdi-checkbox-marked-circle"></i> <span id="selected-count-scheduled">0</span> selected
                                     </span>
                                 </div>
                                 <small class="form-text text-muted">{{ form.network_ids.help_text }}</small>
