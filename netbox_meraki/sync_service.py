@@ -131,6 +131,25 @@ class MerakiSyncService:
         """
         start_time = datetime.now()
         
+        # Log what we received
+        logger.info(f"sync_all called with organization_id={organization_id}, network_ids type={type(network_ids)}, value={network_ids}")
+        
+        # Ensure network_ids is None or a list with valid values
+        if network_ids is not None:
+            if not isinstance(network_ids, list):
+                logger.warning(f"network_ids is not a list (type: {type(network_ids)}), converting to None")
+                network_ids = None
+            elif not network_ids:  # Empty list
+                logger.info("network_ids is empty list, treating as None (sync all networks)")
+                network_ids = None
+            else:
+                # Filter out any empty/None values
+                network_ids = [nid for nid in network_ids if nid]
+                if not network_ids:
+                    logger.info("network_ids contained only empty values, treating as None")
+                    network_ids = None
+                else:
+                    logger.info(f"Syncing {len(network_ids)} specific networks: {network_ids}")
         
         self._cleanup_old_review_items()
         

@@ -34,10 +34,12 @@ class MerakiSyncJob(JobRunner):
             sync_mode = settings.sync_mode
         
         self.logger.info(f"Starting Meraki sync (mode: {sync_mode})")
+        self.logger.info(f"Job kwargs received: {kwargs}")
         if organization_id:
             self.logger.info(f"Organization filter: {organization_id}")
         if network_ids:
-            self.logger.info(f"Network filter: {len(network_ids)} networks")
+            self.logger.info(f"Network filter: {type(network_ids)} with {len(network_ids) if isinstance(network_ids, list) else 'N/A'} networks")
+            self.logger.info(f"Network IDs: {network_ids}")
         
         try:
             sync_service = MerakiSyncService(sync_mode=sync_mode)

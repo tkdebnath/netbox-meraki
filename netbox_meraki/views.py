@@ -931,9 +931,17 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 # Handle network selection - get from POST directly since we build checkboxes dynamically
                 network_ids = request.POST.getlist('network_ids')
                 sync_all_networks = form.cleaned_data.get('sync_all_networks', True)
-                if network_ids and not sync_all_networks:
-                    # Convert to list and filter out empty strings
-                    job_kwargs['network_ids'] = [nid for nid in network_ids if nid]
+                
+                # Only add network_ids to job kwargs if specific networks are selected
+                if not sync_all_networks and network_ids:
+                    # Filter out empty strings and ensure we have valid IDs
+                    filtered_ids = [nid.strip() for nid in network_ids if nid and nid.strip()]
+                    if filtered_ids:
+                        job_kwargs['network_ids'] = filtered_ids
+                        logger.info(f"Scheduling job with {len(filtered_ids)} specific networks")
+                    else:
+                        logger.warning("Network IDs list is empty after filtering, will sync all networks")
+                # If sync_all_networks is True or no valid network IDs, don't add network_ids (means sync all)
                 
                 # Get scheduled time if provided
                 scheduled_time = form.cleaned_data.get('scheduled_time')
