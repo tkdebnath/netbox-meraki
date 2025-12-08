@@ -5,6 +5,14 @@ from django.utils import timezone
 from .models import PluginSettings, SiteNameRule, PrefixFilterRule
 
 
+class MultipleCharField(forms.Field):
+    """Custom field that accepts multiple values without validating choices"""
+    def to_python(self, value):
+        if not value:
+            return []
+        return value if isinstance(value, list) else [value]
+
+
 class ScheduledSyncForm(forms.Form):
     """Form for scheduling a Meraki sync using NetBox's native ScheduledJob"""
     
@@ -75,12 +83,9 @@ class ScheduledSyncForm(forms.Form):
         help_text='Optional: Specific organization to sync'
     )
     
-    network_ids = forms.MultipleChoiceField(
+    network_ids = MultipleCharField(
         required=False,
-        choices=[],
-        widget=forms.CheckboxSelectMultiple(attrs={
-            'style': 'display: none;'  # Hidden, we build checkboxes dynamically in JavaScript
-        }),
+        widget=forms.HiddenInput(),  # Hidden field, we build checkboxes dynamically in JavaScript
         help_text='Optional: Specific networks to sync'
     )
     

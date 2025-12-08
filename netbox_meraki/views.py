@@ -907,6 +907,10 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         form = ScheduledSyncForm(request.POST, organizations=organizations)
         
+        logger.info(f"Form is_valid: {form.is_valid()}")
+        if not form.is_valid():
+            logger.error(f"Form validation errors: {form.errors}")
+        
         if form.is_valid():
             try:
                 from .jobs import MerakiSyncJob
@@ -1052,20 +1056,35 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 logger.error(f"Failed to create scheduled job: {e}", exc_info=True)
         
         # If form invalid, reload page with errors
+        can_schedule = False
+        scheduled_jobs = []
         try:
             from core.models.jobs import Job as ScheduledJob
             from .jobs import MerakiSyncJob
+            can_schedule = True
             # In NetBox 4.4+, filter by name instead of job_class
             scheduled_jobs = ScheduledJob.objects.filter(
                 name__icontains='Meraki',
                 interval__isnull=False
             ).order_by('-created')
+        except ImportError:
+            try:
+                from extras.models import ScheduledJob
+                from .jobs import MerakiSyncJob
+                can_schedule = True
+                scheduled_jobs = ScheduledJob.objects.filter(
+                    name__icontains='Meraki',
+                    interval__isnull=False
+                ).order_by('-created')
+            except:
+                can_schedule = False
         except:
-            scheduled_jobs = []
+            pass
         
         context = {
             'scheduled_jobs': scheduled_jobs,
             'form': form,
+            'can_schedule': can_schedule,
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)
