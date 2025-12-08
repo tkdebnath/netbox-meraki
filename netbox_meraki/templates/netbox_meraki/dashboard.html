@@ -452,16 +452,10 @@
                                             <span class="text-muted">Pending</span>
                                         {% endif %}
                                     </td>
-                                    <td>
-                                        {% if job.enabled %}
-                                            <span class="badge bg-success">
-                                                <i class="mdi mdi-check-circle"></i> Enabled
-                                            </span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">
-                                                <i class="mdi mdi-pause-circle"></i> Paused
-                                            </span>
-                                        {% endif %}
+                                    <parameter name="td">
+                                        <span class="badge bg-success">
+                                            <i class="mdi mdi-check-circle"></i> Active
+                                        </span>
                                     </td>
                                     <td>
                                         <div class="btn-group" role="group">
@@ -472,25 +466,8 @@
                                                 <i class="mdi mdi-pencil"></i> Edit
                                             </a>
                                             
-                                            <!-- Play/Pause Button -->
-                                            <form method="post" 
-                                                  action="{% url 'plugins:netbox_meraki:scheduled_sync_toggle' pk=job.pk %}" 
-                                                  style="display: inline;">
-                                                {% csrf_token %}
-                                                {% if job.enabled %}
-                                                    <button type="submit" 
-                                                            class="btn btn-sm btn-warning" 
-                                                            title="Pause Job">
-                                                        <i class="mdi mdi-pause"></i> Pause
-                                                    </button>
-                                                {% else %}
-                                                    <button type="submit" 
-                                                            class="btn btn-sm btn-success" 
-                                                            title="Resume Job">
-                                                        <i class="mdi mdi-play"></i> Resume
-                                                    </button>
-                                                {% endif %}
-                                            </form>
+                                            <!-- Play/Pause Button - NetBox 4.4.x doesn't support enable/disable -->
+                                            <!-- Jobs are active if scheduled, delete to stop -->
                                             
                                             <!-- Delete Button -->
                                             <form method="post" 

@@ -127,7 +127,9 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
                 ('created', models.DateTimeField(auto_now_add=True)),
-                ('status', models.CharField(choices=[('pending', 'Pending Review'), ('in_progress', 'In Progress'), ('completed', 'Completed'), ('failed', 'Failed')], default='pending', max_length=20)),
+                ('reviewed', models.DateTimeField(blank=True, null=True)),
+                ('reviewed_by', models.CharField(blank=True, max_length=100)),
+                ('status', models.CharField(choices=[('pending', 'Pending Review'), ('approved', 'Approved'), ('partially_approved', 'Partially Approved'), ('rejected', 'Rejected'), ('applied', 'Applied')], default='pending', max_length=20)),
                 ('items_total', models.IntegerField(default=0)),
                 ('items_approved', models.IntegerField(default=0)),
                 ('items_rejected', models.IntegerField(default=0)),

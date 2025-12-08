@@ -96,12 +96,8 @@ class ScheduledSyncForm(forms.Form):
         help_text='Sync all networks in organization'
     )
     
-    enabled = forms.BooleanField(
-        required=False,
-        initial=True,
-        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        help_text='Enable this scheduled job'
-    )
+    # Note: NetBox 4.4.x Job model doesn't have 'enabled' field
+    # Jobs are active when scheduled, stopped by deletion only
     
     def __init__(self, *args, **kwargs):
         organizations = kwargs.pop('organizations', [])

@@ -1046,16 +1046,9 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     # Update job properties (the job object itself is the scheduled job)
                     if job:
                         try:
-                            # Try to access scheduled_job attribute (older NetBox versions)
-                            if hasattr(job, 'scheduled_job') and job.scheduled_job:
-                                job.scheduled_job.description = description
-                                job.scheduled_job.enabled = form.cleaned_data['enabled']
-                                job.scheduled_job.save()
-                            else:
-                                # In NetBox 4.4.7+, the job IS the scheduled job
-                                job.description = description
-                                job.enabled = form.cleaned_data['enabled']
-                                job.save()
+                            # In NetBox 4.4.7+, the job IS the scheduled job
+                            job.description = description
+                            job.save()
                         except AttributeError as e:
                             logger.warning(f"Could not set job properties: {e}")
                     
@@ -1170,7 +1163,7 @@ class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 'sync_mode': job_kwargs.get('sync_mode', 'review'),
                 'organization_id': job_kwargs.get('organization_id', ''),
                 'sync_all_networks': not job_kwargs.get('network_ids'),
-                'enabled': job.enabled,
+                # Note: NetBox 4.4.x doesn't have 'enabled' field
             }
             
             form = ScheduledSyncForm(initial=initial_data, organizations=organizations)
@@ -1213,7 +1206,7 @@ class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
             if form.is_valid():
                 # Update job properties
                 job.name = form.cleaned_data['name']
-                job.enabled = form.cleaned_data['enabled']
+                # Note: NetBox 4.4.x Job model doesn't have 'enabled' field
                 
                 # Update interval
                 interval = form.cleaned_data['interval']
@@ -1309,11 +1302,8 @@ class ScheduledSyncToggleView(LoginRequiredMixin, PermissionRequiredMixin, View)
             from core.models.jobs import Job as ScheduledJob
             
             job = get_object_or_404(ScheduledJob, pk=pk)
-            job.enabled = not job.enabled
-            job.save()
-            
-            status = "enabled" if job.enabled else "disabled"
-            messages.success(request, f'Scheduled job "{job.name}" {status}.')
+            # NetBox 4.4.x doesn't support enable/disable - jobs are controlled by their schedule
+            messages.warning(request, f'NetBox 4.4.x does not support enabling/disabling jobs. Delete the job to stop it, or edit the schedule to change timing.')
         except ImportError:
             messages.error(request, 'NetBox ScheduledJob model not available.')
         except Exception as e:

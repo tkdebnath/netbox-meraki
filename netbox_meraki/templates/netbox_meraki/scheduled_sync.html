@@ -49,22 +49,13 @@
                                             {% endif %}
                                         </td>
                                         <td>
-                                            {% if job.enabled %}
-                                                <span class="badge bg-success">Enabled</span>
-                                            {% else %}
-                                                <span class="badge bg-secondary">Disabled</span>
-                                            {% endif %}
+                                            <span class="badge bg-success">Active</span>
                                         </td>
                                         <td>
                                             <a href="{% url 'plugins:netbox_meraki:scheduled_sync_edit' pk=job.pk %}" class="btn btn-sm btn-primary" title="Edit">
                                                 <i class="mdi mdi-pencil"></i>
                                             </a>
-                                            <form method="post" action="{% url 'plugins:netbox_meraki:scheduled_sync_toggle' pk=job.pk %}" class="d-inline">
-                                                {% csrf_token %}
-                                                <button type="submit" class="btn btn-sm btn-warning" title="{% if job.enabled %}Disable{% else %}Enable{% endif %}">
-                                                    <i class="mdi mdi-{% if job.enabled %}pause{% else %}play{% endif %}"></i>
-                                                </button>
-                                            </form>
+                                            <!-- NetBox 4.4.x doesn't support enable/disable - jobs are active when scheduled -->
                                             <form method="post" action="{% url 'plugins:netbox_meraki:scheduled_sync_delete' pk=job.pk %}" class="d-inline" onsubmit="return confirm('Delete this scheduled job?');">
                                                 {% csrf_token %}
                                                 <button type="submit" class="btn btn-sm btn-danger" title="Delete">
@@ -201,15 +192,8 @@
                             </div>
                         </div>
 
-                        <div class="mb-3 form-check">
-                            {{ form.enabled }}
-                            <label class="form-check-label" for="id_enabled">
-                                Enable this scheduled job
-                            </label>
-                            {% if form.enabled.errors %}
-                                <div class="invalid-feedback d-block">{{ form.enabled.errors.0 }}</div>
-                            {% endif %}
-                        </div>
+                        <!-- Note: NetBox 4.4.x doesn't support job enable/disable -->
+                        <!-- Jobs are active when created, stopped by deletion only -->
 
                         <button type="submit" class="btn btn-primary">
                             <i class="mdi mdi-check"></i> Create Scheduled Job
