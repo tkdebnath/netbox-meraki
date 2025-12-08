@@ -58,12 +58,10 @@ class DashboardView(LoginRequiredMixin, View):
             from .jobs import MerakiSyncJob
             # In NetBox 4.4+, filter by job name instead of job_class
             scheduled_jobs = ScheduledJob.objects.filter(
-                name__icontains='Meraki',
-                interval__isnull=False  # Only recurring jobs
+                name__icontains='Meraki'
             ).order_by('-created')[:5]
             scheduled_jobs_count = ScheduledJob.objects.filter(
-                name__icontains='Meraki',
-                interval__isnull=False
+                name__icontains='Meraki'
             ).count()
         except ImportError:
             pass
@@ -820,9 +818,9 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # In NetBox 4.4+, filter by name instead of job_class
             try:
                 logger.info("Fetching scheduled Meraki jobs...")
+                # Get all Meraki jobs (both recurring and run-once)
                 scheduled_jobs = ScheduledJob.objects.filter(
-                    name__icontains='Meraki',
-                    interval__isnull=False  # Only recurring jobs
+                    name__icontains='Meraki'
                 ).order_by('-created')
                 logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
                 exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs")
@@ -851,8 +849,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 # In NetBox 4.4+, filter by name instead of job_class
                 try:
                     scheduled_jobs = ScheduledJob.objects.filter(
-                        name__icontains='Meraki',
-                        interval__isnull=False
+                        name__icontains='Meraki'
                     ).order_by('-created')
                     exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs (alternate)")
                 except Exception as query_error:
@@ -1074,8 +1071,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             can_schedule = True
             # In NetBox 4.4+, filter by name instead of job_class
             scheduled_jobs = ScheduledJob.objects.filter(
-                name__icontains='Meraki',
-                interval__isnull=False
+                name__icontains='Meraki'
             ).order_by('-created')
         except ImportError:
             try:
@@ -1083,8 +1079,7 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 from .jobs import MerakiSyncJob
                 can_schedule = True
                 scheduled_jobs = ScheduledJob.objects.filter(
-                    name__icontains='Meraki',
-                    interval__isnull=False
+                    name__icontains='Meraki'
                 ).order_by('-created')
             except:
                 can_schedule = False
