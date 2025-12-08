@@ -182,6 +182,7 @@ class MerakiSyncService:
                 self.sync_log.add_progress_log(f"Found {len(organizations)} organizations", "info")
             
             total_orgs = len(organizations)
+            
             for idx, org in enumerate(organizations):
                 
                 if self.sync_log.check_cancel_requested():
@@ -194,7 +195,9 @@ class MerakiSyncService:
                 
                 try:
                     progress = int(((idx + 1) / total_orgs) * 80)  # 0-80% for orgs
-                    self.sync_log.update_progress(f"Syncing organization: {org.get('name')}", progress)
+                    # Enhanced progress message with counts
+                    progress_msg = f"Syncing organization {idx + 1}/{total_orgs}: {org.get('name')}"
+                    self.sync_log.update_progress(progress_msg, progress)
                     self.sync_log.add_progress_log(f"Processing organization: {org.get('name')}", "info")
                     self._sync_organization(org, meraki_tag, network_ids)
                     self.stats['organizations'] += 1
@@ -303,7 +306,9 @@ class MerakiSyncService:
             logger.info(f"Found {len(networks)} networks in {org_name}")
             self.sync_log.add_progress_log(f"Found {len(networks)} networks in {org_name}", "info")
         
-        for network in networks:
+        total_networks = len(networks)
+        
+        for net_idx, network in enumerate(networks):
             # Check for cancellation before processing each network
             if self.sync_log.check_cancel_requested():
                 self.sync_log.add_progress_log("Sync cancelled by user", "warning")
@@ -314,6 +319,9 @@ class MerakiSyncService:
                 return
             
             try:
+                # Enhanced progress with network counts
+                net_progress_msg = f"Syncing network {net_idx + 1}/{total_networks} in {org_name}: {network.get('name', '')}"
+                self.sync_log.add_progress_log(net_progress_msg, "info")
                 self._sync_network(network, org_name, meraki_tag, device_status_map)
                 self.stats['networks'] += 1
             except Exception as e:

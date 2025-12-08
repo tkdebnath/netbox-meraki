@@ -160,31 +160,31 @@
                 <div class="row">
                     <div class="col-md-2">
                         <div class="text-center">
-                            <h3>{{ sync_log.organizations_synced }}</h3>
+                            <h3 id="orgs-stat">{{ sync_log.organizations_synced }}</h3>
                             <p class="text-muted">Organizations</p>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="text-center">
-                            <h3>{{ sync_log.networks_synced }}</h3>
+                            <h3 id="networks-stat">{{ sync_log.networks_synced }}</h3>
                             <p class="text-muted">Networks</p>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="text-center">
-                            <h3>{{ sync_log.devices_synced }}</h3>
+                            <h3 id="devices-stat">{{ sync_log.devices_synced }}</h3>
                             <p class="text-muted">Devices</p>
                         </div>
                     </div>
                     <div class="col-md-3">
                         <div class="text-center">
-                            <h3>{{ sync_log.vlans_synced }}</h3>
+                            <h3 id="vlans-stat">{{ sync_log.vlans_synced }}</h3>
                             <p class="text-muted">VLANs</p>
                         </div>
                     </div>
                     <div class="col-md-2">
                         <div class="text-center">
-                            <h3>{{ sync_log.prefixes_synced }}</h3>
+                            <h3 id="prefixes-stat">{{ sync_log.prefixes_synced }}</h3>
                             <p class="text-muted">Prefixes</p>
                         </div>
                     </div>
@@ -361,9 +361,15 @@ function stopAutoRefresh() {
 }
 
 function fetchProgress() {
-    fetch('{% url "plugins:netbox_meraki:sync_progress_api" sync_log.id %}')
+    // Use the new simplified API endpoint
+    fetch(`{% url 'plugins:netbox_meraki:sync_status_api' pk=sync_log.id %}`)
         .then(response => response.json())
         .then(data => {
+            if (data.error) {
+                console.error('Error fetching progress:', data.error);
+                return;
+            }
+            
             // Update progress bar
             if (data.progress_percent !== undefined) {
                 const progressBar = document.getElementById('progress-bar');
@@ -383,25 +389,74 @@ function fetchProgress() {
                 }
             }
             
+            // Update sync statistics in real-time
+            if (data.devices_synced !== undefined) {
+                updateStatIfExists('devices-stat', data.devices_synced);
+            }
+            if (data.vlans_synced !== undefined) {
+                updateStatIfExists('vlans-stat', data.vlans_synced);
+            }
+            if (data.prefixes_synced !== undefined) {
+                updateStatIfExists('prefixes-stat', data.prefixes_synced);
+            }
+            if (data.networks_synced !== undefined) {
+                updateStatIfExists('networks-stat', data.networks_synced);
+            }
+            if (data.organizations_synced !== undefined) {
+                updateStatIfExists('orgs-stat', data.organizations_synced);
+            }
+            
             // Update progress logs
-            if (data.progress_logs && data.progress_logs.length > 0) {
+            if (data.recent_logs && data.recent_logs.length > 0) {
                 const logsContainer = document.getElementById('progress-logs');
                 if (logsContainer) {
-                    logsContainer.innerHTML = '';
-                    data.progress_logs.forEach(log => {
-                        const logEntry = document.createElement('div');
-                        logEntry.className = 'log-entry';
-                        logEntry.style.marginBottom = '4px';
-                        logEntry.style.color = 'var(--bs-body-color)';
+                    // Append only new logs
+                    data.recent_logs.slice(-5).forEach(log => {
+                        const logId = `log-${log.timestamp}`;
+                        if (!document.getElementById(logId)) {
+                            const logEntry = document.createElement('div');
+                            logEntry.id = logId;
+                            logEntry.className = 'log-entry';
+                            logEntry.style.marginBottom = '4px';
+                            logEntry.style.color = 'var(--bs-body-color)';
+                            
+                            const timestamp = log.timestamp.substring(11, 19);  // HH:MM:SS
+                            const levelBadge = log.level === 'error' ? 
+                                '<span class="badge bg-danger">ERROR</span>' :
+                                log.level === 'warning' ?
+                                '<span class="badge bg-warning" style="color: #000;">WARN</span>' :
+                                '<span class="badge bg-info" style="color: #fff;">INFO</span>';
                         
-                        const timestamp = log.timestamp.substring(0, 19);
-                        const levelBadge = log.level === 'error' ? 
-                            '<span class="badge bg-danger" style="color: #fff;">ERROR</span>' :
-                            log.level === 'warning' ?
-                            '<span class="badge bg-warning" style="color: #000;">WARN</span>' :
-                            '<span class="badge bg-info" style="color: #fff;">INFO</span>';
-                        
-                        logEntry.innerHTML = `<span class="text-muted" style="opacity: 0.7;">[${timestamp}]</span> ${levelBadge} <span style="color: var(--bs-body-color);">${log.message}</span>`;
+                            logEntry.innerHTML = `<span class="text-muted" style="opacity: 0.7;">[${timestamp}]</span> ${levelBadge} <span style="color: var(--bs-body-color);">${log.message}</span>`;
+                            logsContainer.appendChild(logEntry);
+                            
+                            if (autoScroll) {
+                                logEntry.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // If sync completed, reload page
+            if (!data.is_running) {
+                stopAutoRefresh();
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching progress:', error);
+        });
+}
+
+function updateStatIfExists(elementId, value) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = value;
+    }
+}
                         logsContainer.appendChild(logEntry);
                     });
                     // Auto-scroll to bottom if enabled

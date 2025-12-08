@@ -4,6 +4,90 @@ from django.core.exceptions import ValidationError
 from .models import PluginSettings, SiteNameRule, PrefixFilterRule
 
 
+class ScheduledSyncForm(forms.Form):
+    """Form for scheduling a Meraki sync using NetBox's native ScheduledJob"""
+    
+    name = forms.CharField(
+        max_length=200,
+        required=True,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g., Daily Meraki Sync'
+        }),
+        help_text='Descriptive name for this scheduled job'
+    )
+    
+    interval = forms.ChoiceField(
+        choices=[
+            ('custom', 'Custom Interval'),
+            ('60', 'Hourly'),
+            ('360', 'Every 6 Hours'),
+            ('720', 'Every 12 Hours'),
+            ('1440', 'Daily'),
+            ('10080', 'Weekly'),
+        ],
+        initial='1440',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='How often the sync should run'
+    )
+    
+    custom_interval = forms.IntegerField(
+        required=False,
+        min_value=5,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Minutes',
+            'min': '5'
+        }),
+        help_text='Custom interval in minutes (minimum 5)'
+    )
+    
+    sync_mode = forms.ChoiceField(
+        choices=[
+            ('auto', 'Auto Sync - Apply changes immediately'),
+            ('review', 'Sync with Review - Stage for approval'),
+            ('dry_run', 'Dry Run - Preview only'),
+        ],
+        initial='review',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='Sync mode for scheduled execution'
+    )
+    
+    organization_id = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Leave blank for all organizations'
+        }),
+        help_text='Optional: Specific organization ID to sync'
+    )
+    
+    enabled = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        help_text='Enable this scheduled job'
+    )
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        interval = cleaned_data.get('interval')
+        custom_interval = cleaned_data.get('custom_interval')
+        
+        if interval == 'custom' and not custom_interval:
+            raise ValidationError({
+                'custom_interval': 'Custom interval is required when "Custom Interval" is selected'
+            })
+        
+        if interval == 'custom' and custom_interval and custom_interval < 5:
+            raise ValidationError({
+                'custom_interval': 'Interval must be at least 5 minutes'
+            })
+        
+        return cleaned_data
+
+
 class PluginSettingsForm(forms.ModelForm):
     
     class Meta:

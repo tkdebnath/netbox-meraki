@@ -16,7 +16,8 @@ from .models import (
     SyncReview, ReviewItem
 )
 from .forms import (
-    PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm
+    PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm,
+    ScheduledSyncForm
 )
 
 
@@ -29,6 +30,27 @@ class DashboardView(LoginRequiredMixin, View):
         recent_logs = SyncLog.objects.all()[:10]
         
         latest_sync = SyncLog.objects.filter(status='success').first()
+        
+        # Get running syncs
+        running_syncs = SyncLog.objects.filter(status='running').order_by('-timestamp')
+        
+        # Get scheduled jobs
+        scheduled_jobs = []
+        scheduled_jobs_count = 0
+        try:
+            from core.models import ScheduledJob
+            from .jobs import MerakiSyncJob
+            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+            scheduled_jobs = ScheduledJob.objects.filter(
+                job_class=job_class_path,
+                enabled=True
+            ).order_by('-created')[:5]
+            scheduled_jobs_count = ScheduledJob.objects.filter(
+                job_class=job_class_path,
+                enabled=True
+            ).count()
+        except ImportError:
+            pass
         
         plugin_config = settings.PLUGINS_CONFIG.get('netbox_meraki', {})
         api_key_configured = bool(plugin_config.get('meraki_api_key'))
@@ -53,6 +75,9 @@ class DashboardView(LoginRequiredMixin, View):
         context = {
             'recent_logs': recent_logs,
             'latest_sync': latest_sync,
+            'running_syncs': running_syncs,
+            'scheduled_jobs': scheduled_jobs,
+            'scheduled_jobs_count': scheduled_jobs_count,
             'api_key_configured': api_key_configured,
             'device_roles_configured': device_roles_configured,
             'configured_roles_count': len(configured_roles),
@@ -587,8 +612,223 @@ def get_networks_for_org(request, org_id):
             for net in networks
         ]
         
-        return JsonResponse({'networks': network_list})
+        return JsonResponse({
+            'networks': network_list,
+            'total': len(network_list)
+        })
     except Exception as e:
         logger.error(f"Failed to fetch networks for org {org_id}: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_organizations(request):
+    """API endpoint to get all organizations with network counts"""
+    try:
+        sync_service = MerakiSyncService()
+        organizations = sync_service.client.get_organizations()
+        
+        # Add network count for each organization
+        org_list = []
+        for org in organizations:
+            try:
+                networks = sync_service.client.get_networks(org['id'])
+                org_data = {
+                    'id': org['id'],
+                    'name': org['name'],
+                    'network_count': len(networks)
+                }
+                org_list.append(org_data)
+            except Exception as e:
+                logger.error(f"Failed to get networks for org {org['id']}: {e}")
+                org_list.append({
+                    'id': org['id'],
+                    'name': org['name'],
+                    'network_count': 0
+                })
+        
+        return JsonResponse({'organizations': org_list})
+    except Exception as e:
+        logger.error(f"Failed to fetch organizations: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_sync_progress(request, pk):
+    """API endpoint to get real-time sync progress for a specific sync log"""
+    try:
+        from .models import SyncLog
+        
+        sync_log = get_object_or_404(SyncLog, pk=pk)
+        
+        # Get recent progress logs (last 10 entries)
+        recent_logs = sync_log.progress_logs[-10:] if sync_log.progress_logs else []
+        
+        response_data = {
+            'id': sync_log.pk,
+            'status': sync_log.status,
+            'progress_percent': sync_log.progress_percent,
+            'current_operation': sync_log.current_operation,
+            'devices_synced': sync_log.devices_synced,
+            'vlans_synced': sync_log.vlans_synced,
+            'prefixes_synced': sync_log.prefixes_synced,
+            'networks_synced': sync_log.networks_synced,
+            'organizations_synced': sync_log.organizations_synced,
+            'recent_logs': recent_logs,
+            'is_running': sync_log.status == 'running',
+            'cancel_requested': sync_log.cancel_requested,
+        }
+        
+        return JsonResponse(response_data)
+    except Exception as e:
+        logger.error(f"Failed to fetch sync progress: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """View for managing scheduled syncs using NetBox's native ScheduledJob"""
+    
+    permission_required = 'extras.view_scheduledjob'
+    
+    def get(self, request):
+        try:
+            from core.models import ScheduledJob
+            from .jobs import MerakiSyncJob
+            
+            # Get all scheduled Meraki sync jobs
+            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+            scheduled_jobs = ScheduledJob.objects.filter(
+                job_class=job_class_path
+            ).order_by('-created')
+            
+        except ImportError:
+            scheduled_jobs = []
+            messages.warning(request, 'NetBox ScheduledJob model not available. Ensure you are running NetBox 4.0+')
+        
+        form = ScheduledSyncForm()
+        
+        context = {
+            'scheduled_jobs': scheduled_jobs,
+            'form': form,
+        }
+        
+        return render(request, 'netbox_meraki/scheduled_sync.html', context)
+    
+    def post(self, request):
+        form = ScheduledSyncForm(request.POST)
+        
+        if form.is_valid():
+            try:
+                from core.models import ScheduledJob
+                from .jobs import MerakiSyncJob
+                
+                # Get interval
+                interval = form.cleaned_data['interval']
+                if interval == 'custom':
+                    interval_minutes = form.cleaned_data['custom_interval']
+                else:
+                    interval_minutes = int(interval)
+                
+                # Build job kwargs
+                job_kwargs = {
+                    'sync_mode': form.cleaned_data['sync_mode'],
+                }
+                
+                if form.cleaned_data.get('organization_id'):
+                    job_kwargs['organization_id'] = form.cleaned_data['organization_id']
+                
+                # Create scheduled job
+                job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+                
+                # Create job without data field (NetBox handles job_kwargs differently)
+                scheduled_job = ScheduledJob.objects.create(
+                    name=form.cleaned_data['name'],
+                    job_class=job_class_path,
+                    interval=interval_minutes,
+                    enabled=form.cleaned_data['enabled'],
+                    user=request.user
+                )
+                
+                # Store sync configuration in job name for reference
+                if job_kwargs:
+                    mode_label = form.cleaned_data['sync_mode'].replace('_', ' ').title()
+                    scheduled_job.description = f"Mode: {mode_label}"
+                    if job_kwargs.get('organization_id'):
+                        scheduled_job.description += f" | Org: {job_kwargs['organization_id']}"
+                    scheduled_job.save()
+                
+                messages.success(
+                    request,
+                    f'Scheduled job "{scheduled_job.name}" created successfully. '
+                    f'Runs every {interval_minutes} minutes.'
+                )
+                return redirect('plugins:netbox_meraki:scheduled_sync')
+                
+            except ImportError:
+                messages.error(request, 'NetBox ScheduledJob model not available. Ensure you are running NetBox 4.0+')
+            except Exception as e:
+                messages.error(request, f'Failed to create scheduled job: {str(e)}')
+                logger.error(f"Failed to create scheduled job: {e}", exc_info=True)
+        
+        # If form invalid, reload page with errors
+        try:
+            from core.models import ScheduledJob
+            from .jobs import MerakiSyncJob
+            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+            scheduled_jobs = ScheduledJob.objects.filter(job_class=job_class_path).order_by('-created')
+        except:
+            scheduled_jobs = []
+        
+        context = {
+            'scheduled_jobs': scheduled_jobs,
+            'form': form,
+        }
+        
+        return render(request, 'netbox_meraki/scheduled_sync.html', context)
+
+
+class ScheduledSyncDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Delete a scheduled sync job"""
+    
+    permission_required = 'extras.delete_scheduledjob'
+    
+    def post(self, request, pk):
+        try:
+            from core.models import ScheduledJob
+            
+            job = get_object_or_404(ScheduledJob, pk=pk)
+            job_name = job.name
+            job.delete()
+            
+            messages.success(request, f'Scheduled job "{job_name}" deleted successfully.')
+        except ImportError:
+            messages.error(request, 'NetBox ScheduledJob model not available.')
+        except Exception as e:
+            messages.error(request, f'Failed to delete scheduled job: {str(e)}')
+        
+        return redirect('plugins:netbox_meraki:scheduled_sync')
+
+
+class ScheduledSyncToggleView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Toggle enable/disable status of a scheduled job"""
+    
+    permission_required = 'extras.change_scheduledjob'
+    
+    def post(self, request, pk):
+        try:
+            from core.models import ScheduledJob
+            
+            job = get_object_or_404(ScheduledJob, pk=pk)
+            job.enabled = not job.enabled
+            job.save()
+            
+            status = "enabled" if job.enabled else "disabled"
+            messages.success(request, f'Scheduled job "{job.name}" {status}.')
+        except ImportError:
+            messages.error(request, 'NetBox ScheduledJob model not available.')
+        except Exception as e:
+            messages.error(request, f'Failed to toggle scheduled job: {str(e)}')
+        
+        return redirect('plugins:netbox_meraki:scheduled_sync')
+
 
