@@ -80,11 +80,6 @@ class Migration(migrations.Migration):
                 ('api_requests_per_second', models.IntegerField(default=5, help_text='Maximum API requests per second (Meraki limit is 10/sec, recommended: 5)', verbose_name='API Requests Per Second')),
                 ('enable_multithreading', models.BooleanField(default=False, help_text='Use multiple threads to fetch data from Meraki API in parallel (faster but may hit rate limits)', verbose_name='Enable Multithreading')),
                 ('max_worker_threads', models.IntegerField(default=3, help_text='Maximum number of concurrent threads for API requests (recommended: 2-5)', verbose_name='Max Worker Threads')),
-                ('auto_create_sites', models.BooleanField(default=True, help_text='Automatically create sites from Meraki networks')),
-                ('auto_create_device_types', models.BooleanField(default=True, help_text='Automatically create device types for Meraki models')),
-                ('auto_create_manufacturers', models.BooleanField(default=True, help_text='Automatically create manufacturers if they do not exist')),
-                ('default_site_group', models.CharField(blank=True, help_text='Default site group name for created sites', max_length=100)),
-                ('default_manufacturer', models.CharField(default='Cisco Meraki', help_text='Default manufacturer name', max_length=100)),
             ],
             options={
                 'verbose_name': 'Plugin Settings',
