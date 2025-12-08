@@ -24,7 +24,7 @@ All notable changes to the NetBox Meraki Sync Plugin.
 - Removed Play/Pause toggle (not supported in NetBox 4.4.x)
 - Jobs are now deleted to stop execution
 
-## [1.0.0] - 2024-12-01
+## [1.0.0] - 2025-12-06
 
 ### Added
 - **Three Sync Modes**:
