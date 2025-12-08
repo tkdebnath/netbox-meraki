@@ -528,7 +528,7 @@ class MerakiSyncService:
         product_type = device.get('productType', '')
         if not product_type and model and len(model) >= 2:
             # Get first two characters of model (e.g., "MS350-48LP" -> "MS")
-            product_type = model[:2].upper()
+            product_type = model[:2].upper() if model else ''
         
         logger.debug(f"Syncing device: {name} ({serial}) - Model: {model}, Product Type: {product_type}")
         
@@ -923,7 +923,7 @@ class MerakiSyncService:
             
             for port in ports:
                 port_id = port.get('portId')
-                port_name = port.get('name', f"Port {port_id}")
+                port_name = port.get('name') or f"Port {port_id}"
                 enabled = port.get('enabled', True)
                 port_type = port.get('type', 'access')  # access or trunk
                 vlan = port.get('vlan')  # For access ports
@@ -933,7 +933,7 @@ class MerakiSyncService:
                 
                 # Determine interface type based on port speed/type
                 interface_type = '1000base-t'  # Default to gigabit
-                if 'SFP' in port_name.upper() or 'uplink' in port_name.lower():
+                if port_name and ('SFP' in port_name.upper() or 'uplink' in port_name.lower()):
                     interface_type = '10gbase-x-sfpp'
                 
                 # Build description
@@ -1570,7 +1570,7 @@ class MerakiSyncService:
                     'MV': '9c27b0',  # Purple for cameras
                     'MT': '00bcd4',  # Cyan for sensors
                 }
-                product_prefix = product_type[:2].upper() if len(product_type) >= 2 else ''
+                product_prefix = product_type[:2].upper() if product_type and len(product_type) >= 2 else ''
                 role_color = role_color_map.get(product_prefix, '607d8b')  # Grey for unknown
                 
                 logger.info(f"Creating/getting role '{role_name}' with color '{role_color}' for product prefix '{product_prefix}'")
