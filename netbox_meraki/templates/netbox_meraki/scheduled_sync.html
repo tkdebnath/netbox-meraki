@@ -22,6 +22,13 @@
                             Your NetBox version does not support scheduled jobs. 
                             Please use <a href="{% url 'plugins:netbox_meraki:sync' %}" style="color: #842029; text-decoration: underline; font-weight: bold;">manual sync</a> instead.
                         </p>
+                        {% if exception_details %}
+                        <details class="mt-3">
+                            <summary style="cursor: pointer; font-weight: bold;">Debug Information</summary>
+                            <pre style="background-color: #f8f9fa; padding: 10px; border-radius: 3px; margin-top: 10px; font-size: 0.85em; color: #212529;">{% for detail in exception_details %}{{ detail }}
+{% endfor %}</pre>
+                        </details>
+                        {% endif %}
                     </div>
                     {% endif %}
                     

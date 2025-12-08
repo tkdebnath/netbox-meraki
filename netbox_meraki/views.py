@@ -691,52 +691,84 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'extras.view_scheduledjob'
     
     def get(self, request):
+        print("=" * 80)
+        print("SCHEDULED SYNC VIEW - GET METHOD CALLED")
+        print("=" * 80)
+        
         scheduled_jobs = []
         organizations = []
         
         # Try to import ScheduledJob - try multiple paths for different NetBox versions
         can_schedule = False
         import_error_msg = None
+        exception_details = []  # Collect all exceptions for debugging
         
         # Debug: Log NetBox version
         try:
             import netbox
             netbox_version = netbox.settings.VERSION
             logger.info(f"NetBox version: {netbox_version}")
+            print(f"✓ NetBox version: {netbox_version}")
+            exception_details.append(f"✓ NetBox version: {netbox_version}")
         except Exception as e:
             logger.warning(f"Could not determine NetBox version: {e}")
+            print(f"⚠ Version check failed: {str(e)}")
+            exception_details.append(f"⚠ Version check failed: {str(e)}")
         
         try:
+            print("Attempting to import ScheduledJob from core.models.jobs...")
             logger.info("Attempting to import ScheduledJob from core.models.jobs...")
             from core.models.jobs import Job as ScheduledJob
             logger.info("✓ Successfully imported ScheduledJob from core.models.jobs")
+            print("✓ Successfully imported ScheduledJob from core.models.jobs")
+            exception_details.append("✓ Import: core.models.jobs.Job")
+            
             from .jobs import MerakiSyncJob
             logger.info("✓ Successfully imported MerakiSyncJob")
+            print("✓ Successfully imported MerakiSyncJob")
+            exception_details.append("✓ Import: MerakiSyncJob")
             can_schedule = True
+            print(f"✓ can_schedule set to: {can_schedule}")
             
             # In NetBox 4.4+, filter by name instead of job_class
             try:
+                print("Fetching scheduled Meraki jobs...")
                 logger.info("Fetching scheduled Meraki jobs...")
                 scheduled_jobs = ScheduledJob.objects.filter(
                     name__icontains='Meraki',
                     interval__isnull=False  # Only recurring jobs
                 ).order_by('-created')
                 logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
+                print(f"✓ Query: Found {len(scheduled_jobs)} jobs")
+                exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs")
             except Exception as query_error:
                 logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
+                print(f"✗ Query error: {type(query_error).__name__}: {str(query_error)}")
+                import traceback
+                traceback.print_exc()
                 messages.warning(request, f'Error loading scheduled jobs: {str(query_error)}')
+                exception_details.append(f"✗ Query error: {str(query_error)}")
                 # Keep can_schedule=True since imports worked
                 
         except ImportError as e:
             # Try alternate import path
             import_error_msg = str(e)
             logger.warning(f"✗ Failed to import from core.models.jobs: {e}")
+            print(f"✗ core.models.jobs import failed: {str(e)}")
+            exception_details.append(f"✗ core.models.jobs import failed: {str(e)}")
+            
             try:
+                print("Attempting to import ScheduledJob from extras.models...")
                 logger.info("Attempting to import ScheduledJob from extras.models...")
                 from extras.models import ScheduledJob
                 logger.info("✓ Successfully imported ScheduledJob from extras.models")
+                print("✓ Successfully imported ScheduledJob from extras.models")
+                exception_details.append("✓ Import: extras.models.ScheduledJob")
+                
                 from .jobs import MerakiSyncJob
                 can_schedule = True
+                print(f"✓ can_schedule set to: {can_schedule} (alternate path)")
+                exception_details.append("✓ Import: MerakiSyncJob (alternate path)")
                 
                 # In NetBox 4.4+, filter by name instead of job_class
                 try:
@@ -744,14 +776,32 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                         name__icontains='Meraki',
                         interval__isnull=False
                     ).order_by('-created')
+                    print(f"✓ Query: Found {len(scheduled_jobs)} jobs (alternate)")
+                    exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs (alternate)")
                 except Exception as query_error:
                     logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
+                    print(f"✗ Query error (alternate): {type(query_error).__name__}: {str(query_error)}")
+                    import traceback
+                    traceback.print_exc()
+                    exception_details.append(f"✗ Query error (alternate): {str(query_error)}")
                     # Keep can_schedule=True since imports worked
                     
             except ImportError as e2:
                 logger.error(f"✗ Failed to import from extras.models: {e2}")
+                print(f"✗ extras.models import failed: {str(e2)}")
                 logger.error(f"SCHEDULING DISABLED - Import errors: core.models ({e}) / extras.models ({e2})")
+                print(f"✗ SCHEDULING DISABLED - All import paths failed")
+                exception_details.append(f"✗ extras.models import failed: {str(e2)}")
+                exception_details.append("✗ SCHEDULING DISABLED - All import paths failed")
                 can_schedule = False
+                print(f"✗ can_schedule set to: {can_schedule}")
+        except Exception as e:
+            logger.error(f"Unexpected error in ScheduledSyncView.get(): {e}", exc_info=True)
+            print(f"✗ Unexpected error: {type(e).__name__}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            exception_details.append(f"✗ Unexpected error: {type(e).__name__}: {str(e)}")
+            # Don't change can_schedule here - it may have been set to True already
         
         # Fetch organizations for dropdown even if scheduling not available
         try:
@@ -765,13 +815,20 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         form = ScheduledSyncForm(organizations=organizations)
         
+        print(f"FINAL STATE: can_schedule = {can_schedule}")
+        print(f"FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}")
+        print(f"Exception details: {exception_details}")
+        print("=" * 80)
+        
         logger.info(f"DEBUG: can_schedule = {can_schedule}")
         logger.info(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
+        logger.info(f"DEBUG: Exception details: {exception_details}")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
             'form': form,
             'can_schedule': can_schedule,
+            'exception_details': exception_details,  # Pass to template for debugging
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)
