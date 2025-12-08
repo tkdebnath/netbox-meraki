@@ -40,14 +40,14 @@ class DashboardView(LoginRequiredMixin, View):
         try:
             from core.models.jobs import Job as ScheduledJob
             from .jobs import MerakiSyncJob
-            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+            # In NetBox 4.4+, filter by job name instead of job_class
             scheduled_jobs = ScheduledJob.objects.filter(
-                job_class=job_class_path,
-                enabled=True
+                name__icontains='Meraki',
+                interval__isnull=False  # Only recurring jobs
             ).order_by('-created')[:5]
             scheduled_jobs_count = ScheduledJob.objects.filter(
-                job_class=job_class_path,
-                enabled=True
+                name__icontains='Meraki',
+                interval__isnull=False
             ).count()
         except ImportError:
             pass
@@ -714,10 +714,11 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             logger.info("✓ Successfully imported MerakiSyncJob")
             can_schedule = True
             
-            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
-            logger.info(f"Job class path: {job_class_path}")
+            # In NetBox 4.4+, filter by name instead of job_class
+            logger.info("Fetching scheduled Meraki jobs...")
             scheduled_jobs = ScheduledJob.objects.filter(
-                job_class=job_class_path
+                name__icontains='Meraki',
+                interval__isnull=False  # Only recurring jobs
             ).order_by('-created')
             logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
         except ImportError as e:
@@ -731,9 +732,10 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 from .jobs import MerakiSyncJob
                 can_schedule = True
                 
-                job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+                # In NetBox 4.4+, filter by name instead of job_class
                 scheduled_jobs = ScheduledJob.objects.filter(
-                    job_class=job_class_path
+                    name__icontains='Meraki',
+                    interval__isnull=False
                 ).order_by('-created')
             except ImportError as e2:
                 logger.error(f"✗ Failed to import from extras.models: {e2}")
@@ -857,8 +859,11 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             from core.models.jobs import Job as ScheduledJob
             from .jobs import MerakiSyncJob
-            job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
-            scheduled_jobs = ScheduledJob.objects.filter(job_class=job_class_path).order_by('-created')
+            # In NetBox 4.4+, filter by name instead of job_class
+            scheduled_jobs = ScheduledJob.objects.filter(
+                name__icontains='Meraki',
+                interval__isnull=False
+            ).order_by('-created')
         except:
             scheduled_jobs = []
         
