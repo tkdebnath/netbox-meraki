@@ -13,7 +13,7 @@ from django.utils import timezone
 from .sync_service import MerakiSyncService
 from .models import (
     SyncLog, PluginSettings, SiteNameRule, PrefixFilterRule, 
-    SyncReview, ReviewItem
+    SyncReview, ReviewItem, ScheduledJobTracker
 )
 from .forms import (
     PluginSettingsForm, SiteNameRuleForm, PrefixFilterRuleForm,
@@ -50,19 +50,16 @@ class DashboardView(LoginRequiredMixin, View):
         # Get running syncs
         running_syncs = SyncLog.objects.filter(status='running').order_by('-timestamp')
         
-        # Get scheduled jobs
+        # Get scheduled jobs using tracker
         scheduled_jobs = []
         scheduled_jobs_count = 0
         try:
             from core.models.jobs import Job as ScheduledJob
-            from .jobs import MerakiSyncJob
-            # In NetBox 4.4+, filter by job name instead of job_class
-            scheduled_jobs = ScheduledJob.objects.filter(
-                name__icontains='Meraki'
-            ).order_by('-created')[:5]
-            scheduled_jobs_count = ScheduledJob.objects.filter(
-                name__icontains='Meraki'
-            ).count()
+            # Get job IDs from tracker
+            tracked_job_ids = list(ScheduledJobTracker.objects.values_list('netbox_job_id', flat=True))
+            if tracked_job_ids:
+                scheduled_jobs = ScheduledJob.objects.filter(id__in=tracked_job_ids).order_by('-created')[:5]
+                scheduled_jobs_count = ScheduledJob.objects.filter(id__in=tracked_job_ids).count()
         except ImportError:
             pass
         
@@ -815,19 +812,28 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             exception_details.append("✓ Import: MerakiSyncJob")
             can_schedule = True
             
-            # In NetBox 4.4+, filter by name instead of job_class
+            # Query scheduled jobs using our tracker
             try:
-                logger.info("Fetching scheduled Meraki jobs...")
-                # Get all Meraki jobs (both recurring and run-once)
-                scheduled_jobs = ScheduledJob.objects.filter(
-                    name__icontains='Meraki'
-                ).order_by('-created')
-                logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
-                exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs")
+                logger.info("Fetching scheduled Meraki jobs from tracker...")
+                # Get job IDs from our tracker
+                tracked_job_ids = list(ScheduledJobTracker.objects.values_list('netbox_job_id', flat=True))
+                logger.info(f"Tracker has {len(tracked_job_ids)} job IDs: {tracked_job_ids}")
+                
+                if tracked_job_ids:
+                    scheduled_jobs = ScheduledJob.objects.filter(
+                        id__in=tracked_job_ids
+                    ).order_by('-created')
+                    logger.info(f"Found {len(scheduled_jobs)} scheduled jobs from tracker")
+                else:
+                    scheduled_jobs = ScheduledJob.objects.none()
+                    logger.info("No tracked jobs found")
+                
+                exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs from tracker")
             except Exception as query_error:
                 logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
                 messages.warning(request, f'Error loading scheduled jobs: {str(query_error)}')
                 exception_details.append(f"✗ Query error: {str(query_error)}")
+                scheduled_jobs = ScheduledJob.objects.none()
                 # Keep can_schedule=True since imports worked
                 
         except ImportError as e:
@@ -979,6 +985,14 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     logger.info(f"Calling enqueue with: {enqueue_kwargs}")
                     try:
                         job = MerakiSyncJob.enqueue(**enqueue_kwargs)
+                        
+                        # Track this job in our database
+                        if job and hasattr(job, 'pk'):
+                            ScheduledJobTracker.objects.create(
+                                netbox_job_id=job.pk,
+                                job_name=form.cleaned_data['name']
+                            )
+                            logger.info(f"Tracked job ID {job.pk} in ScheduledJobTracker")
                     except TypeError as te:
                         logger.error(f"TypeError during enqueue: {te}", exc_info=True)
                         logger.error(f"enqueue_kwargs: {enqueue_kwargs}")
@@ -1044,6 +1058,14 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                                 job.save()
                         except AttributeError as e:
                             logger.warning(f"Could not set job properties: {e}")
+                    
+                    # Track the job in our database
+                    if job and hasattr(job, 'pk'):
+                        ScheduledJobTracker.objects.create(
+                            netbox_job_id=job.pk,
+                            job_name=form.cleaned_data['name']
+                        )
+                        logger.info(f"Tracked recurring job ID {job.pk} with name '{form.cleaned_data['name']}'")
                     
                     # Build success message
                     success_msg = f'Scheduled job "{form.cleaned_data["name"]}" created successfully. '
@@ -1261,6 +1283,11 @@ class ScheduledSyncDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View)
             
             job = get_object_or_404(ScheduledJob, pk=pk)
             job_name = job.name
+            
+            # Remove from tracker before deleting the job
+            ScheduledJobTracker.objects.filter(netbox_job_id=pk).delete()
+            logger.info(f"Removed job ID {pk} from tracker")
+            
             job.delete()
             
             messages.success(request, f'Scheduled job "{job_name}" deleted successfully.')

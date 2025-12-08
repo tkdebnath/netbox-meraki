@@ -339,77 +339,6 @@
 </script>
 {% endif %}
 
-{% if scheduled_jobs %}
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="card">
-            <div class="card-header" style="background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%); color: #ffffff; font-weight: 600;">
-                <strong>Scheduled Syncs</strong>
-                <span class="badge bg-light text-dark ms-2">{{ scheduled_jobs_count }} Total</span>
-            </div>
-            <div class="card-body">
-                <table class="table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Interval</th>
-                            <th>Sync Mode</th>
-                            <th>Next Run</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for job in scheduled_jobs %}
-                            <tr>
-                                <td>{{ job.name }}</td>
-                                <td>
-                                    {% if job.interval %}
-                                        Every {{ job.interval }} minutes
-                                    {% else %}
-                                        Not set
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if 'full' in job.description|lower %}
-                                        <span class="badge bg-primary">Full Sync</span>
-                                    {% elif 'selective' in job.description|lower %}
-                                        <span class="badge bg-info">Selective</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Custom</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if job.scheduled %}
-                                        {{ job.scheduled }}
-                                    {% else %}
-                                        <span class="text-muted">Pending</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if job.enabled %}
-                                        <span class="badge bg-success">Enabled</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Disabled</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% if scheduled_jobs_count > 5 %}
-                <div class="text-center mt-3">
-                    <p class="text-muted">Showing 5 of {{ scheduled_jobs_count }} scheduled jobs</p>
-                    <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-sm btn-outline-primary">
-                        View All Schedules
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-
 <div class="row mt-4">
     <div class="col-md-12">
         <div class="card">
@@ -472,6 +401,128 @@
                     </table>
                 {% else %}
                     <p class="text-muted">No sync logs available.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scheduled Jobs Section -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header" style="background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%); color: #ffffff; font-weight: 600;">
+                <strong>Scheduled Sync Jobs</strong>
+                {% if scheduled_jobs_count %}
+                    <span class="badge bg-light text-dark ms-2">{{ scheduled_jobs_count }} Total</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if scheduled_jobs %}
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Interval</th>
+                                <th>Next Run</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in scheduled_jobs %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ job.name }}</strong>
+                                        {% if job.description %}
+                                            <br><small class="text-muted">{{ job.description }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.interval %}
+                                            Every {{ job.interval }} minutes
+                                        {% else %}
+                                            <span class="text-muted">One-time</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.scheduled %}
+                                            {{ job.scheduled }}
+                                        {% else %}
+                                            <span class="text-muted">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if job.enabled %}
+                                            <span class="badge bg-success">
+                                                <i class="mdi mdi-check-circle"></i> Enabled
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">
+                                                <i class="mdi mdi-pause-circle"></i> Paused
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <!-- Edit Button -->
+                                            <a href="{% url 'plugins:netbox_meraki:scheduled_sync_edit' pk=job.pk %}" 
+                                               class="btn btn-sm btn-primary" 
+                                               title="Edit Schedule">
+                                                <i class="mdi mdi-pencil"></i> Edit
+                                            </a>
+                                            
+                                            <!-- Play/Pause Button -->
+                                            <form method="post" 
+                                                  action="{% url 'plugins:netbox_meraki:scheduled_sync_toggle' pk=job.pk %}" 
+                                                  style="display: inline;">
+                                                {% csrf_token %}
+                                                {% if job.enabled %}
+                                                    <button type="submit" 
+                                                            class="btn btn-sm btn-warning" 
+                                                            title="Pause Job">
+                                                        <i class="mdi mdi-pause"></i> Pause
+                                                    </button>
+                                                {% else %}
+                                                    <button type="submit" 
+                                                            class="btn btn-sm btn-success" 
+                                                            title="Resume Job">
+                                                        <i class="mdi mdi-play"></i> Resume
+                                                    </button>
+                                                {% endif %}
+                                            </form>
+                                            
+                                            <!-- Delete Button -->
+                                            <form method="post" 
+                                                  action="{% url 'plugins:netbox_meraki:scheduled_sync_delete' pk=job.pk %}" 
+                                                  style="display: inline;"
+                                                  onsubmit="return confirm('Are you sure you want to delete this scheduled job?');">
+                                                {% csrf_token %}
+                                                <button type="submit" 
+                                                        class="btn btn-sm btn-danger" 
+                                                        title="Delete Job">
+                                                    <i class="mdi mdi-delete"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if scheduled_jobs_count > 5 %}
+                        <div class="text-center mt-3">
+                            <p class="text-muted">Showing 5 most recent of {{ scheduled_jobs_count }} scheduled jobs</p>
+                            <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-outline-primary">
+                                <i class="mdi mdi-clock-outline"></i> View All Scheduled Jobs
+                            </a>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <p class="text-muted">No scheduled jobs configured.</p>
+                    <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-primary">
+                        <i class="mdi mdi-plus-circle"></i> Create Scheduled Job
+                    </a>
                 {% endif %}
             </div>
         </div>

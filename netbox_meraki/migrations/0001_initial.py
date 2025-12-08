@@ -21,6 +21,10 @@ class Migration(migrations.Migration):
     operations = [
         # Drop existing tables if they exist (for clean reinstall)
         migrations.RunSQL(
+            sql="DROP TABLE IF EXISTS netbox_meraki_scheduledjobtracker CASCADE;",
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
             sql="DROP TABLE IF EXISTS netbox_meraki_reviewitem CASCADE;",
             reverse_sql=migrations.RunSQL.noop,
         ),
@@ -208,6 +212,22 @@ class Migration(migrations.Migration):
                 'verbose_name': 'Review Item',
                 'verbose_name_plural': 'Review Items',
                 'ordering': ['item_type', 'object_name'],
+            },
+        ),
+        
+        # ScheduledJobTracker Model
+        migrations.CreateModel(
+            name='ScheduledJobTracker',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False)),
+                ('netbox_job_id', models.IntegerField(unique=True, help_text='The NetBox Job ID for the scheduled job')),
+                ('job_name', models.CharField(max_length=200, help_text='User-provided name for the scheduled job')),
+                ('created', models.DateTimeField(auto_now_add=True, help_text='When this job was created')),
+            ],
+            options={
+                'verbose_name': 'Scheduled Job Tracker',
+                'verbose_name_plural': 'Scheduled Job Trackers',
+                'ordering': ['-created'],
             },
         ),
         

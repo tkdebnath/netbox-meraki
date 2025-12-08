@@ -820,3 +820,29 @@ class ReviewItem(models.Model):
                     'new': new_value
                 }
         return changes
+
+
+class ScheduledJobTracker(models.Model):
+    """Track scheduled jobs created by this plugin"""
+    netbox_job_id = models.IntegerField(
+        unique=True,
+        verbose_name='NetBox Job ID',
+        help_text='ID of the NetBox scheduled job'
+    )
+    job_name = models.CharField(
+        max_length=200,
+        verbose_name='Job Name',
+        help_text='User-provided name for the job'
+    )
+    created = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Created'
+    )
+    
+    class Meta:
+        verbose_name = 'Scheduled Job Tracker'
+        verbose_name_plural = 'Scheduled Job Trackers'
+        ordering = ['-created']
+    
+    def __str__(self):
+        return f"{self.job_name} (ID: {self.netbox_job_id})"
