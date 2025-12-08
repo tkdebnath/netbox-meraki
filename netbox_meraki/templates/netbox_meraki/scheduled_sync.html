@@ -14,6 +14,7 @@
                     <strong><i class="mdi mdi-plus"></i> Create Scheduled Job</strong>
                 </div>
                 <div class="card-body">
+                    <!-- DEBUG: can_schedule = {{ can_schedule }} -->
                     {% if not can_schedule %}
                     <div class="alert" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; padding: 15px; border-radius: 5px;">
                         <i class="mdi mdi-alert"></i>
@@ -22,6 +23,7 @@
                             Your NetBox version does not support scheduled jobs. 
                             Please use <a href="{% url 'plugins:netbox_meraki:sync' %}" style="color: #842029; text-decoration: underline; font-weight: bold;">manual sync</a> instead.
                         </p>
+                        <p class="mb-0 mt-2"><small>Debug: can_schedule={{ can_schedule }}</small></p>
                     </div>
                     {% endif %}
                     

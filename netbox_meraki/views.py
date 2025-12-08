@@ -691,12 +691,15 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'extras.view_scheduledjob'
     
     def get(self, request):
+        print("!!! ScheduledSyncView.get() called !!!")
         scheduled_jobs = []
         organizations = []
         
         # Try to import ScheduledJob - try multiple paths for different NetBox versions
         can_schedule = False
         import_error_msg = None
+        
+        print(f"!!! Initial can_schedule = {can_schedule} !!!")
         
         # Debug: Log NetBox version
         try:
@@ -767,6 +770,10 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         logger.info(f"DEBUG: can_schedule = {can_schedule}")
         logger.info(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
+        
+        # Force logging to console for debugging
+        print(f"!!! DEBUG: can_schedule = {can_schedule} !!!")
+        print(f"!!! DEBUG: scheduled_jobs = {scheduled_jobs} !!!")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
