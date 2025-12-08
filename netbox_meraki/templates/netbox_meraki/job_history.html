@@ -156,7 +156,15 @@
                             {% endif %}
                         </td>
                         <td>
-                            <span class="badge bg-info">{{ log.sync_mode|default:"N/A"|upper }}</span>
+                            {% if log.sync_mode == 'auto' %}
+                                <span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">AUTO</span>
+                            {% elif log.sync_mode == 'review' %}
+                                <span class="badge" style="background-color: #fd7e14; color: #fff; font-weight: 600;">REVIEW</span>
+                            {% elif log.sync_mode == 'dry_run' %}
+                                <span class="badge" style="background-color: #6c757d; color: #fff; font-weight: 600;">DRY RUN</span>
+                            {% else %}
+                                <span class="badge" style="background-color: #6c757d; color: #fff; font-weight: 600;">{{ log.sync_mode|default:"N/A"|upper }}</span>
+                            {% endif %}
                         </td>
                         <td>{{ log.organizations_synced|default:"0" }}</td>
                         <td>{{ log.networks_synced|default:"0" }}</td>
