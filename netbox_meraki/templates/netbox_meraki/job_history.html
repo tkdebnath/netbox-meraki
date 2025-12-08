@@ -33,9 +33,9 @@
             </div>
         </div>
         <div class="col-md-2">
-            <div class="card text-center" style="border-left: 4px solid #0dcaf0;">
+            <div class="card text-center" style="border-left: 4px solid #0d6efd;">
                 <div class="card-body">
-                    <h5 class="card-title text-info">{{ stats.running }}</h5>
+                    <h5 class="card-title" style="color: #0d6efd; font-weight: 700;">{{ stats.running }}</h5>
                     <p class="card-text text-muted">Running</p>
                 </div>
             </div>
@@ -114,9 +114,9 @@
 
     <!-- Job History Table -->
     <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="background-color: #0d6efd; color: #fff; font-weight: 600;">
             <strong><i class="mdi mdi-history"></i> Job History</strong>
-            <span class="badge bg-secondary float-end">{{ logs.paginator.count }} total jobs</span>
+            <span class="badge bg-light text-dark float-end" style="font-weight: 600;">{{ logs.paginator.count }} total jobs</span>
         </div>
         <div class="table-responsive">
             <table class="table table-hover">
