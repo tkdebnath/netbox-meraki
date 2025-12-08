@@ -26,7 +26,7 @@ DROP TABLE IF EXISTS netbox_meraki_synclog CASCADE;
 DROP TABLE IF EXISTS netbox_meraki_prefixfilterrule CASCADE;
 DROP TABLE IF EXISTS netbox_meraki_sitenamerule CASCADE;
 DROP TABLE IF EXISTS netbox_meraki_pluginsettings CASCADE;
-DROP TABLE IF EXISTS django_migrations WHERE app='netbox_meraki';
+DELETE FROM django_migrations WHERE app='netbox_meraki';
 \q
 EOF
 
@@ -52,25 +52,20 @@ echo ""
 echo "Step 6: Installing plugin..."
 pip install -e .
 
-# Step 7: Generate migration
+# Step 7: Apply migration
 echo ""
-echo "Step 7: Generating migration..."
+echo "Step 7: Applying migration..."
 cd /opt/netbox/netbox
-python manage.py makemigrations netbox_meraki
-
-# Step 8: Apply migration
-echo ""
-echo "Step 8: Applying migration..."
 python manage.py migrate netbox_meraki
 
-# Step 9: Collect static files
+# Step 8: Collect static files
 echo ""
-echo "Step 9: Collecting static files..."
+echo "Step 8: Collecting static files..."
 python manage.py collectstatic --no-input
 
-# Step 10: Restart services
+# Step 9: Restart services
 echo ""
-echo "Step 10: Restarting NetBox services..."
+echo "Step 9: Restarting NetBox services..."
 sudo systemctl restart netbox netbox-rq
 
 echo ""
