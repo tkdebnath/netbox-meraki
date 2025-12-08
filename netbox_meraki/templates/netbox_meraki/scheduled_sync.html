@@ -189,6 +189,9 @@
                                             {% endif %}
                                         </td>
                                         <td>
+                                            <a href="{% url 'plugins:netbox_meraki:scheduled_sync_edit' pk=job.pk %}" class="btn btn-sm btn-primary" title="Edit">
+                                                <i class="mdi mdi-pencil"></i>
+                                            </a>
                                             <form method="post" action="{% url 'plugins:netbox_meraki:scheduled_sync_toggle' pk=job.pk %}" class="d-inline">
                                                 {% csrf_token %}
                                                 <button type="submit" class="btn btn-sm btn-warning" title="{% if job.enabled %}Disable{% else %}Enable{% endif %}">

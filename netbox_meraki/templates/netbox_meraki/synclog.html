@@ -457,44 +457,42 @@ function updateStatIfExists(elementId, value) {
         element.textContent = value;
     }
 }
-                        logsContainer.appendChild(logEntry);
-                    });
-                    // Auto-scroll to bottom if enabled
-                    if (autoScroll) {
-                        logsContainer.scrollTop = logsContainer.scrollHeight;
-                    }
-                }
-            }
-            
-            // If sync is no longer running, reload the page
-            if (data.status !== 'running') {
-                stopAutoRefresh();
-                location.reload();
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching progress:', error);
-        });
-}
 
 function cancelSync() {
+    console.log('cancelSync() called');
+    
     if (confirm('Are you sure you want to cancel this sync operation?')) {
-        fetch('{% url "plugins:netbox_meraki:sync_cancel_api" sync_log.id %}', {
+        console.log('User confirmed cancellation');
+        
+        const url = '{% url "plugins:netbox_meraki:sync_cancel_api" sync_log.id %}';
+        console.log('Fetching URL:', url);
+        
+        fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken')
             }
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('Response data:', data);
             alert('Cancellation requested. The sync will stop after the current operation.');
-            document.getElementById('cancel-sync-btn').disabled = true;
+            const cancelBtn = document.getElementById('cancel-sync-btn');
+            if (cancelBtn) {
+                cancelBtn.disabled = true;
+                cancelBtn.innerHTML = '<i class="mdi mdi-check"></i> Cancellation Requested';
+            }
         })
         .catch(error => {
             console.error('Error canceling sync:', error);
             alert('Failed to cancel sync: ' + error);
         });
+    } else {
+        console.log('User cancelled the cancellation');
     }
 }
 

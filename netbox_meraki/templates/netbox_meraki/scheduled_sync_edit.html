@@ -1,0 +1,300 @@
+{% extends 'netbox_meraki/base.html' %}
+
+{% block page_content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Edit Scheduled Job</h1>
+        <p class="text-muted">Modify the configuration of this scheduled sync job.</p>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <strong><i class="mdi mdi-pencil"></i> Edit Job: {{ job.name }}</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="id_name" class="form-label">Job Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">{{ form.name.help_text }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_interval" class="form-label">Interval *</label>
+                        {{ form.interval }}
+                        {% if form.interval.errors %}
+                            <div class="invalid-feedback d-block">{{ form.interval.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">{{ form.interval.help_text }}</small>
+                    </div>
+
+                    <div class="mb-3" id="custom-interval-group" style="display: none;">
+                        <label for="id_custom_interval" class="form-label">Custom Interval (minutes)</label>
+                        {{ form.custom_interval }}
+                        {% if form.custom_interval.errors %}
+                            <div class="invalid-feedback d-block">{{ form.custom_interval.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">{{ form.custom_interval.help_text }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="id_sync_mode" class="form-label">Sync Mode *</label>
+                        {{ form.sync_mode }}
+                        {% if form.sync_mode.errors %}
+                            <div class="invalid-feedback d-block">{{ form.sync_mode.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">{{ form.sync_mode.help_text }}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="organization_id" class="form-label">Organization (Optional)</label>
+                        {{ form.organization_id }}
+                        <div id="network-count-badge" style="display: none; margin-top: 8px;">
+                            <span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">
+                                <i class="mdi mdi-network"></i> <span id="network-count">0</span> Networks
+                            </span>
+                        </div>
+                        {% if form.organization_id.errors %}
+                            <div class="invalid-feedback d-block">{{ form.organization_id.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">{{ form.organization_id.help_text }}</small>
+                    </div>
+
+                    <div class="mb-3" id="network-select-container" style="display: none;">
+                        <label class="form-label"><strong>Networks</strong></label>
+                        <div class="form-check mb-2">
+                            {{ form.sync_all_networks }}
+                            <label class="form-check-label" for="sync_all_networks_scheduled">
+                                Sync all networks in organization
+                            </label>
+                        </div>
+                        <div id="network-list-container" style="display: none;">
+                            <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                <div id="network-list-scheduled" class="mb-0">
+                                    <div class="text-muted text-center py-3">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        Loading networks...
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="selected-network-count-scheduled" style="display: none; margin-top: 8px;">
+                                <span class="badge" style="background-color: #198754; color: #fff; font-weight: 600;">
+                                    <i class="mdi mdi-checkbox-marked-circle"></i> <span id="selected-count-scheduled">0</span> selected
+                                </span>
+                            </div>
+                            <small class="form-text text-muted">Select specific networks to sync</small>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        {{ form.enabled }}
+                        <label class="form-check-label" for="id_enabled">
+                            Enable this scheduled job
+                        </label>
+                        {% if form.enabled.errors %}
+                            <div class="invalid-feedback d-block">{{ form.enabled.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="mdi mdi-check"></i> Save Changes
+                    </button>
+                    <a href="{% url 'plugins:netbox_meraki:scheduled_sync' %}" class="btn btn-secondary">
+                        <i class="mdi mdi-close"></i> Cancel
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <strong><i class="mdi mdi-information"></i> Current Configuration</strong>
+            </div>
+            <div class="card-body">
+                <p><strong>Created:</strong> {{ job.created|date:"Y-m-d H:i" }}</p>
+                <p><strong>Status:</strong> 
+                    {% if job.enabled %}
+                        <span class="badge bg-success">Enabled</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Disabled</span>
+                    {% endif %}
+                </p>
+                {% if job.interval %}
+                    <p><strong>Current Interval:</strong> Every {{ job.interval }} minutes</p>
+                {% else %}
+                    <p><strong>Type:</strong> Run Once</p>
+                {% endif %}
+                {% if job_kwargs.sync_mode %}
+                    <p><strong>Mode:</strong> {{ job_kwargs.sync_mode|title }}</p>
+                {% endif %}
+                {% if job_kwargs.organization_id %}
+                    <p><strong>Organization:</strong> {{ job_kwargs.organization_id }}</p>
+                {% endif %}
+                {% if job_kwargs.network_ids %}
+                    <p><strong>Networks:</strong> {{ job_kwargs.network_ids|length }} selected</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const intervalSelect = document.getElementById('id_interval');
+    const customIntervalGroup = document.getElementById('custom-interval-group');
+    const organizationSelect = document.getElementById('organization_id');
+    const networkCountBadge = document.getElementById('network-count-badge');
+    const networkCountSpan = document.getElementById('network-count');
+    const networkSelectContainer = document.getElementById('network-select-container');
+    const syncAllCheckbox = document.getElementById('sync_all_networks_scheduled');
+    const networkListContainer = document.getElementById('network-list-container');
+    const networkList = document.getElementById('network-list-scheduled');
+    
+    function toggleCustomInterval() {
+        if (intervalSelect.value === 'custom') {
+            customIntervalGroup.style.display = 'block';
+        } else {
+            customIntervalGroup.style.display = 'none';
+        }
+    }
+    
+    function fetchNetworkCount() {
+        const orgId = organizationSelect.value.trim();
+        
+        if (!orgId) {
+            networkCountBadge.style.display = 'none';
+            networkSelectContainer.style.display = 'none';
+            return;
+        }
+        
+        networkCountSpan.textContent = '...';
+        networkCountBadge.style.display = 'block';
+        
+        fetch(`{% url 'plugins:netbox_meraki:get_organizations' %}`)
+            .then(response => response.json())
+            .then(data => {
+                const org = data.organizations.find(o => o.id === orgId);
+                if (org) {
+                    networkCountSpan.textContent = org.network_count || 0;
+                    networkCountBadge.style.display = 'block';
+                    networkSelectContainer.style.display = 'block';
+                    loadNetworks(orgId);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching organization info:', error);
+                networkCountBadge.style.display = 'none';
+            });
+    }
+    
+    function loadNetworks(orgId) {
+        if (!orgId) return;
+        
+        networkList.innerHTML = '<div class="text-muted text-center py-3"><span class="spinner-border spinner-border-sm me-2" role="status"></span>Loading networks...</div>';
+        networkListContainer.style.display = 'none';
+        
+        fetch(`{% url 'plugins:netbox_meraki:get_networks' org_id=0 %}`.replace('/0/', `/${orgId}/`))
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    networkList.innerHTML = `<div class="alert alert-danger mb-0"><strong>Error:</strong> ${data.error}</div>`;
+                    networkListContainer.style.display = 'block';
+                    return;
+                }
+                
+                const networks = data.networks || [];
+                const selectedNetworks = {{ job_kwargs.network_ids|default:"[]"|safe }};
+                
+                if (networks.length === 0) {
+                    networkList.innerHTML = '<div class="text-muted text-center py-3">No networks found</div>';
+                    networkListContainer.style.display = 'block';
+                    return;
+                }
+                
+                let html = '';
+                networks.forEach(network => {
+                    const productTypes = network.productTypes ? network.productTypes.join(', ') : 'Unknown';
+                    const isChecked = selectedNetworks.includes(network.id) ? 'checked' : '';
+                    
+                    html += `
+                        <div class="form-check">
+                            <input class="form-check-input network-checkbox" type="checkbox" 
+                                   name="network_ids" value="${network.id}" id="network_${network.id}" ${isChecked}>
+                            <label class="form-check-label" for="network_${network.id}">
+                                <strong>${network.name}</strong>
+                                <small class="text-muted ms-2">(${productTypes})</small>
+                            </label>
+                        </div>
+                    `;
+                });
+                
+                networkList.innerHTML = html;
+                document.querySelectorAll('.network-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', updateSelectedCount);
+                });
+                
+                networkListContainer.style.display = 'block';
+                updateSelectedCount();
+            })
+            .catch(error => {
+                console.error('Error loading networks:', error);
+                networkList.innerHTML = '<div class="alert alert-danger mb-0">Failed to load networks</div>';
+                networkListContainer.style.display = 'block';
+            });
+    }
+    
+    function toggleNetworkList() {
+        if (syncAllCheckbox && syncAllCheckbox.checked) {
+            networkListContainer.style.display = 'none';
+        } else {
+            networkListContainer.style.display = 'block';
+        }
+    }
+    
+    function updateSelectedCount() {
+        const selectedCheckboxes = document.querySelectorAll('.network-checkbox:checked');
+        const count = selectedCheckboxes.length;
+        const countBadge = document.getElementById('selected-network-count-scheduled');
+        const countSpan = document.getElementById('selected-count-scheduled');
+        
+        if (count > 0) {
+            countSpan.textContent = count;
+            countBadge.style.display = 'block';
+            if (syncAllCheckbox) {
+                syncAllCheckbox.checked = false;
+            }
+        } else {
+            countBadge.style.display = 'none';
+            if (syncAllCheckbox) {
+                syncAllCheckbox.checked = true;
+            }
+        }
+    }
+    
+    intervalSelect.addEventListener('change', toggleCustomInterval);
+    organizationSelect.addEventListener('change', fetchNetworkCount);
+    
+    if (syncAllCheckbox) {
+        syncAllCheckbox.addEventListener('change', toggleNetworkList);
+        toggleNetworkList();
+    }
+    
+    toggleCustomInterval();
+    
+    // Load networks if organization is already selected
+    if (organizationSelect.value) {
+        fetchNetworkCount();
+    }
+});
+</script>
+{% endblock %}

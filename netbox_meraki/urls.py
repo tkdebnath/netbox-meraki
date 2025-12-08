@@ -32,6 +32,7 @@ urlpatterns = [
     path('api/organizations/', views.get_organizations, name='get_organizations'),
     
     path('scheduled-sync/', views.ScheduledSyncView.as_view(), name='scheduled_sync'),
+    path('scheduled-sync/<int:pk>/edit/', views.ScheduledSyncEditView.as_view(), name='scheduled_sync_edit'),
     path('scheduled-sync/<int:pk>/delete/', views.ScheduledSyncDeleteView.as_view(), name='scheduled_sync_delete'),
     path('scheduled-sync/<int:pk>/toggle/', views.ScheduledSyncToggleView.as_view(), name='scheduled_sync_toggle'),
 ]

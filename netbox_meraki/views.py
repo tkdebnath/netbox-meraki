@@ -904,11 +904,6 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         logger.info(f"network_ids from getlist: {request.POST.getlist('network_ids')}")
         logger.info(f"sync_all_networks: {request.POST.get('sync_all_networks')}")
         
-        # DEBUG: Show visible message to user
-        network_ids_raw = request.POST.getlist('network_ids')
-        sync_all = request.POST.get('sync_all_networks')
-        messages.info(request, f"DEBUG: Received {len(network_ids_raw)} network IDs: {network_ids_raw[:3]}... | sync_all={sync_all}")
-        
         # Fetch organizations for form validation
         organizations = []
         try:
@@ -1103,6 +1098,147 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)
+
+
+class ScheduledSyncEditView(LoginRequiredMixin, PermissionRequiredMixin, View):
+    """Edit a scheduled sync job"""
+    
+    permission_required = 'extras.change_scheduledjob'
+    
+    def get(self, request, pk):
+        try:
+            from core.models.jobs import Job as ScheduledJob
+            from .sync_service import MerakiSyncService
+            
+            job = get_object_or_404(ScheduledJob, pk=pk)
+            
+            # Fetch organizations for dropdown
+            try:
+                sync_service = MerakiSyncService()
+                organizations = sync_service.client.get_organizations()
+            except Exception as e:
+                logger.error(f"Failed to fetch organizations: {e}")
+                organizations = []
+            
+            # Parse job kwargs
+            job_kwargs = job.job_kwargs if hasattr(job, 'job_kwargs') else {}
+            
+            # Determine interval value
+            if job.interval:
+                # Check if it's a standard interval
+                interval_map = {
+                    60: '60',
+                    360: '360',
+                    720: '720',
+                    1440: '1440',
+                    10080: '10080',
+                }
+                interval_value = interval_map.get(job.interval, 'custom')
+                custom_interval = job.interval if interval_value == 'custom' else None
+            else:
+                interval_value = '0'  # Run once
+                custom_interval = None
+            
+            # Prepare initial form data
+            initial_data = {
+                'name': job.name,
+                'interval': interval_value,
+                'custom_interval': custom_interval,
+                'sync_mode': job_kwargs.get('sync_mode', 'review'),
+                'organization_id': job_kwargs.get('organization_id', ''),
+                'sync_all_networks': not job_kwargs.get('network_ids'),
+                'enabled': job.enabled,
+            }
+            
+            form = ScheduledSyncForm(initial=initial_data, organizations=organizations)
+            
+            context = {
+                'form': form,
+                'job': job,
+                'job_kwargs': job_kwargs,
+                'is_edit': True,
+                'can_schedule': True,
+            }
+            
+            return render(request, 'netbox_meraki/scheduled_sync_edit.html', context)
+            
+        except ImportError:
+            messages.error(request, 'NetBox ScheduledJob model not available.')
+            return redirect('plugins:netbox_meraki:scheduled_sync')
+        except Exception as e:
+            logger.error(f"Error loading scheduled job: {e}", exc_info=True)
+            messages.error(request, f'Failed to load scheduled job: {str(e)}')
+            return redirect('plugins:netbox_meraki:scheduled_sync')
+    
+    def post(self, request, pk):
+        try:
+            from core.models.jobs import Job as ScheduledJob
+            from .sync_service import MerakiSyncService
+            
+            job = get_object_or_404(ScheduledJob, pk=pk)
+            
+            # Fetch organizations
+            try:
+                sync_service = MerakiSyncService()
+                organizations = sync_service.client.get_organizations()
+            except Exception as e:
+                logger.error(f"Failed to fetch organizations: {e}")
+                organizations = []
+            
+            form = ScheduledSyncForm(request.POST, organizations=organizations)
+            
+            if form.is_valid():
+                # Update job properties
+                job.name = form.cleaned_data['name']
+                job.enabled = form.cleaned_data['enabled']
+                
+                # Update interval
+                interval = form.cleaned_data['interval']
+                if interval == 'custom':
+                    job.interval = form.cleaned_data['custom_interval']
+                elif interval == '0':
+                    job.interval = None  # Run once
+                else:
+                    job.interval = int(interval)
+                
+                # Update job_kwargs
+                job_kwargs = {
+                    'sync_mode': form.cleaned_data['sync_mode'],
+                }
+                
+                if form.cleaned_data.get('organization_id'):
+                    job_kwargs['organization_id'] = form.cleaned_data['organization_id']
+                
+                # Handle network selection
+                network_ids = request.POST.getlist('network_ids')
+                sync_all_networks = form.cleaned_data.get('sync_all_networks', True)
+                
+                if not sync_all_networks and network_ids:
+                    filtered_ids = [nid.strip() for nid in network_ids if nid and nid.strip()]
+                    if filtered_ids:
+                        job_kwargs['network_ids'] = filtered_ids
+                
+                job.job_kwargs = job_kwargs
+                job.save()
+                
+                messages.success(request, f'Scheduled job "{job.name}" updated successfully.')
+                return redirect('plugins:netbox_meraki:scheduled_sync')
+            else:
+                context = {
+                    'form': form,
+                    'job': job,
+                    'is_edit': True,
+                    'can_schedule': True,
+                }
+                return render(request, 'netbox_meraki/scheduled_sync_edit.html', context)
+                
+        except ImportError:
+            messages.error(request, 'NetBox ScheduledJob model not available.')
+            return redirect('plugins:netbox_meraki:scheduled_sync')
+        except Exception as e:
+            logger.error(f"Error updating scheduled job: {e}", exc_info=True)
+            messages.error(request, f'Failed to update scheduled job: {str(e)}')
+            return redirect('plugins:netbox_meraki:scheduled_sync')
 
 
 class ScheduledSyncDeleteView(LoginRequiredMixin, PermissionRequiredMixin, View):
