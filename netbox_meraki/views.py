@@ -691,19 +691,6 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
     permission_required = 'extras.view_scheduledjob'
     
     def get(self, request):
-        import sys
-        import uuid
-        request_id = str(uuid.uuid4())[:8]
-        
-        sys.stderr.write("=" * 80 + "\n")
-        sys.stderr.write(f"SCHEDULED SYNC VIEW - GET METHOD CALLED [Request ID: {request_id}]\n")
-        sys.stderr.write("=" * 80 + "\n")
-        sys.stderr.flush()
-        
-        print("=" * 80, file=sys.stderr)
-        print(f"SCHEDULED SYNC VIEW - GET METHOD CALLED [Request ID: {request_id}]", file=sys.stderr)
-        print("=" * 80, file=sys.stderr)
-        
         scheduled_jobs = []
         organizations = []
         
@@ -716,45 +703,34 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             import netbox
             netbox_version = netbox.settings.VERSION
-            logger.error(f"NetBox version: {netbox_version}")  # Use error level to ensure it shows
-            print(f"✓ NetBox version: {netbox_version}", file=sys.stderr)
+            logger.info(f"NetBox version: {netbox_version}")
             exception_details.append(f"✓ NetBox version: {netbox_version}")
         except Exception as e:
-            logger.error(f"Could not determine NetBox version: {e}")
-            print(f"⚠ Version check failed: {str(e)}", file=sys.stderr)
+            logger.warning(f"Could not determine NetBox version: {e}")
             exception_details.append(f"⚠ Version check failed: {str(e)}")
         
         try:
-            print("Attempting to import ScheduledJob from core.models.jobs...", file=sys.stderr)
-            logger.error("Attempting to import ScheduledJob from core.models.jobs...")
+            logger.info("Attempting to import ScheduledJob from core.models.jobs...")
             from core.models.jobs import Job as ScheduledJob
-            logger.error("✓ Successfully imported ScheduledJob from core.models.jobs")
-            print("✓ Successfully imported ScheduledJob from core.models.jobs", file=sys.stderr)
+            logger.info("✓ Successfully imported ScheduledJob from core.models.jobs")
             exception_details.append("✓ Import: core.models.jobs.Job")
             
             from .jobs import MerakiSyncJob
-            logger.error("✓ Successfully imported MerakiSyncJob")
-            print("✓ Successfully imported MerakiSyncJob", file=sys.stderr)
+            logger.info("✓ Successfully imported MerakiSyncJob")
             exception_details.append("✓ Import: MerakiSyncJob")
             can_schedule = True
-            print(f"✓ can_schedule set to: {can_schedule}", file=sys.stderr)
             
             # In NetBox 4.4+, filter by name instead of job_class
             try:
-                print("Fetching scheduled Meraki jobs...")
                 logger.info("Fetching scheduled Meraki jobs...")
                 scheduled_jobs = ScheduledJob.objects.filter(
                     name__icontains='Meraki',
                     interval__isnull=False  # Only recurring jobs
                 ).order_by('-created')
                 logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
-                print(f"✓ Query: Found {len(scheduled_jobs)} jobs")
                 exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs")
             except Exception as query_error:
                 logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
-                print(f"✗ Query error: {type(query_error).__name__}: {str(query_error)}")
-                import traceback
-                traceback.print_exc()
                 messages.warning(request, f'Error loading scheduled jobs: {str(query_error)}')
                 exception_details.append(f"✗ Query error: {str(query_error)}")
                 # Keep can_schedule=True since imports worked
@@ -763,20 +739,16 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # Try alternate import path
             import_error_msg = str(e)
             logger.warning(f"✗ Failed to import from core.models.jobs: {e}")
-            print(f"✗ core.models.jobs import failed: {str(e)}")
             exception_details.append(f"✗ core.models.jobs import failed: {str(e)}")
             
             try:
-                print("Attempting to import ScheduledJob from extras.models...")
                 logger.info("Attempting to import ScheduledJob from extras.models...")
                 from extras.models import ScheduledJob
                 logger.info("✓ Successfully imported ScheduledJob from extras.models")
-                print("✓ Successfully imported ScheduledJob from extras.models")
                 exception_details.append("✓ Import: extras.models.ScheduledJob")
                 
                 from .jobs import MerakiSyncJob
                 can_schedule = True
-                print(f"✓ can_schedule set to: {can_schedule} (alternate path)")
                 exception_details.append("✓ Import: MerakiSyncJob (alternate path)")
                 
                 # In NetBox 4.4+, filter by name instead of job_class
@@ -785,30 +757,20 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                         name__icontains='Meraki',
                         interval__isnull=False
                     ).order_by('-created')
-                    print(f"✓ Query: Found {len(scheduled_jobs)} jobs (alternate)")
                     exception_details.append(f"✓ Query: Found {len(scheduled_jobs)} jobs (alternate)")
                 except Exception as query_error:
                     logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
-                    print(f"✗ Query error (alternate): {type(query_error).__name__}: {str(query_error)}")
-                    import traceback
-                    traceback.print_exc()
                     exception_details.append(f"✗ Query error (alternate): {str(query_error)}")
                     # Keep can_schedule=True since imports worked
                     
             except ImportError as e2:
                 logger.error(f"✗ Failed to import from extras.models: {e2}")
-                print(f"✗ extras.models import failed: {str(e2)}")
                 logger.error(f"SCHEDULING DISABLED - Import errors: core.models ({e}) / extras.models ({e2})")
-                print(f"✗ SCHEDULING DISABLED - All import paths failed")
                 exception_details.append(f"✗ extras.models import failed: {str(e2)}")
                 exception_details.append("✗ SCHEDULING DISABLED - All import paths failed")
                 can_schedule = False
-                print(f"✗ can_schedule set to: {can_schedule}")
         except Exception as e:
             logger.error(f"Unexpected error in ScheduledSyncView.get(): {e}", exc_info=True)
-            print(f"✗ Unexpected error: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
             exception_details.append(f"✗ Unexpected error: {type(e).__name__}: {str(e)}")
             # Don't change can_schedule here - it may have been set to True already
         
@@ -824,23 +786,14 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         
         form = ScheduledSyncForm(organizations=organizations)
         
-        import sys
-        sys.stderr.write(f"[Request ID: {request_id}] FINAL STATE: can_schedule = {can_schedule} (type: {type(can_schedule)})\n")
-        sys.stderr.write(f"[Request ID: {request_id}] FINAL STATE: scheduled_jobs count = {len(scheduled_jobs)}\n")
-        sys.stderr.write(f"[Request ID: {request_id}] Exception details: {exception_details}\n")
-        sys.stderr.write("=" * 80 + "\n")
-        sys.stderr.flush()
-        
-        logger.error(f"[Request ID: {request_id}] DEBUG: can_schedule = {can_schedule} (type: {type(can_schedule)})")
-        logger.error(f"[Request ID: {request_id}] DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
-        logger.error(f"[Request ID: {request_id}] DEBUG: Exception details: {exception_details}")
+        logger.info(f"DEBUG: can_schedule = {can_schedule}")
+        logger.info(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
             'form': form,
             'can_schedule': can_schedule,
             'exception_details': exception_details,  # Pass to template for debugging
-            'request_id': request_id,  # Add request ID to template
         }
         
         return render(request, 'netbox_meraki/scheduled_sync.html', context)
@@ -931,13 +884,22 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     if job_kwargs.get('network_ids'):
                         description += f" | Networks: {len(job_kwargs['network_ids'])}"
                     
-                    # Update scheduled job properties
+                    # In NetBox 4.4.7, enqueue_once() returns the Job instance directly
+                    # Update job properties (the job object itself is the scheduled job)
                     if job:
-                        scheduled_job = job.scheduled_job
-                        if scheduled_job:
-                            scheduled_job.description = description
-                            scheduled_job.enabled = form.cleaned_data['enabled']
-                            scheduled_job.save()
+                        try:
+                            # Try to access scheduled_job attribute (older NetBox versions)
+                            if hasattr(job, 'scheduled_job') and job.scheduled_job:
+                                job.scheduled_job.description = description
+                                job.scheduled_job.enabled = form.cleaned_data['enabled']
+                                job.scheduled_job.save()
+                            else:
+                                # In NetBox 4.4.7+, the job IS the scheduled job
+                                job.description = description
+                                job.enabled = form.cleaned_data['enabled']
+                                job.save()
+                        except AttributeError as e:
+                            logger.warning(f"Could not set job properties: {e}")
                     
                     # Build success message
                     success_msg = f'Scheduled job "{form.cleaned_data["name"]}" created successfully. '
