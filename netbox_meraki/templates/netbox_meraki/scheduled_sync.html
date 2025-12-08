@@ -54,7 +54,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="id_organization_id" class="form-label">Organization ID (Optional)</label>
+                            <label for="organization_id" class="form-label">Organization (Optional)</label>
                             {{ form.organization_id }}
                             <div id="network-count-badge" style="display: none; margin-top: 8px;">
                                 <span class="badge bg-info">
@@ -65,6 +65,29 @@
                                 <div class="invalid-feedback d-block">{{ form.organization_id.errors.0 }}</div>
                             {% endif %}
                             <small class="form-text text-muted">{{ form.organization_id.help_text }}</small>
+                        </div>
+
+                        <div class="mb-3" id="network-select-container" style="display: none;">
+                            <div class="form-check mb-2">
+                                {{ form.sync_all_networks }}
+                                <label class="form-check-label" for="sync_all_networks_scheduled">
+                                    Sync all networks in organization
+                                </label>
+                            </div>
+                            <div id="network-list-container" style="display: none;">
+                                <label for="id_network_ids" class="form-label">Select Networks</label>
+                                {{ form.network_ids }}
+                                <div id="network-loading" class="text-muted text-center py-3">
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    Loading networks...
+                                </div>
+                                <div id="selected-network-count-scheduled" style="display: none; margin-top: 8px;">
+                                    <span class="badge bg-success">
+                                        <i class="mdi mdi-check-circle"></i> <span id="selected-count-scheduled">0</span> networks selected
+                                    </span>
+                                </div>
+                                <small class="form-text text-muted">{{ form.network_ids.help_text }}</small>
+                            </div>
                         </div>
 
                         <div class="mb-3 form-check">
@@ -169,6 +192,7 @@
                 <div class="card-body">
                     <h6>Recommended Intervals:</h6>
                     <ul>
+                        <li><strong>Run Once:</strong> Execute immediately, no recurring</li>
                         <li><strong>Hourly (60 min):</strong> For critical infrastructure</li>
                         <li><strong>Every 6 Hours (360 min):</strong> Balanced approach</li>
                         <li><strong>Daily (1440 min):</strong> Most common</li>
@@ -191,9 +215,14 @@
 document.addEventListener('DOMContentLoaded', function() {
     const intervalSelect = document.getElementById('id_interval');
     const customIntervalGroup = document.getElementById('custom-interval-group');
-    const organizationInput = document.getElementById('id_organization_id');
+    const organizationSelect = document.getElementById('organization_id');
     const networkCountBadge = document.getElementById('network-count-badge');
     const networkCountSpan = document.getElementById('network-count');
+    const networkSelectContainer = document.getElementById('network-select-container');
+    const syncAllCheckbox = document.getElementById('sync_all_networks_scheduled');
+    const networkListContainer = document.getElementById('network-list-container');
+    const networkSelect = document.getElementById('id_network_ids');
+    const networkLoading = document.getElementById('network-loading');
     
     function toggleCustomInterval() {
         if (intervalSelect.value === 'custom') {
@@ -204,10 +233,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     function fetchNetworkCount() {
-        const orgId = organizationInput.value.trim();
+        const orgId = organizationSelect.value.trim();
         
         if (!orgId) {
             networkCountBadge.style.display = 'none';
+            networkSelectContainer.style.display = 'none';
             return;
         }
         
@@ -215,31 +245,89 @@ document.addEventListener('DOMContentLoaded', function() {
         networkCountSpan.textContent = '...';
         networkCountBadge.style.display = 'block';
         
-        fetch(`{% url 'plugins:netbox_meraki:get_networks' org_id=0 %}`.replace('/0/', `/${orgId}/`))
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to fetch networks');
-                }
-                return response.json();
-            })
+        fetch(`{% url 'plugins:netbox_meraki:get_organizations' %}`)
+            .then(response => response.json())
             .then(data => {
-                const count = data.total || data.networks.length || 0;
-                networkCountSpan.textContent = count;
-                networkCountBadge.style.display = 'block';
+                const org = data.organizations.find(o => o.id === orgId);
+                if (org) {
+                    networkCountSpan.textContent = org.network_count || 0;
+                    networkCountBadge.style.display = 'block';
+                    networkSelectContainer.style.display = 'block';
+                    
+                    // Load networks for selection
+                    loadNetworks(orgId);
+                }
             })
             .catch(error => {
-                console.error('Error fetching network count:', error);
+                console.error('Error fetching organization info:', error);
                 networkCountBadge.style.display = 'none';
             });
     }
     
-    intervalSelect.addEventListener('change', toggleCustomInterval);
-    organizationInput.addEventListener('blur', fetchNetworkCount);
-    organizationInput.addEventListener('keyup', function(e) {
-        if (e.key === 'Enter') {
-            fetchNetworkCount();
+    function loadNetworks(orgId) {
+        if (!orgId) return;
+        
+        networkLoading.style.display = 'block';
+        networkSelect.style.display = 'none';
+        
+        fetch(`{% url 'plugins:netbox_meraki:get_networks' org_id=0 %}`.replace('/0/', `/${orgId}/`))
+            .then(response => response.json())
+            .then(data => {
+                // Clear existing options
+                networkSelect.innerHTML = '';
+                
+                // Add network options
+                if (data.networks && data.networks.length > 0) {
+                    data.networks.forEach(network => {
+                        const option = document.createElement('option');
+                        option.value = network.id;
+                        option.textContent = network.name;
+                        networkSelect.appendChild(option);
+                    });
+                }
+                
+                networkLoading.style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error loading networks:', error);
+                networkLoading.style.display = 'none';
+            });
+    }
+    
+    function toggleNetworkList() {
+        if (syncAllCheckbox && syncAllCheckbox.checked) {
+            networkListContainer.style.display = 'none';
+        } else {
+            networkListContainer.style.display = 'block';
+            networkSelect.style.display = 'block';
         }
-    });
+    }
+    
+    function updateSelectedCount() {
+        const selectedOptions = Array.from(networkSelect.selectedOptions);
+        const count = selectedOptions.length;
+        const countBadge = document.getElementById('selected-network-count-scheduled');
+        const countSpan = document.getElementById('selected-count-scheduled');
+        
+        if (count > 0) {
+            countSpan.textContent = count;
+            countBadge.style.display = 'block';
+        } else {
+            countBadge.style.display = 'none';
+        }
+    }
+    
+    intervalSelect.addEventListener('change', toggleCustomInterval);
+    organizationSelect.addEventListener('change', fetchNetworkCount);
+    
+    if (syncAllCheckbox) {
+        syncAllCheckbox.addEventListener('change', toggleNetworkList);
+        toggleNetworkList();
+    }
+    
+    if (networkSelect) {
+        networkSelect.addEventListener('change', updateSelectedCount);
+    }
     
     toggleCustomInterval();
 });

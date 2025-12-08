@@ -19,6 +19,7 @@ class ScheduledSyncForm(forms.Form):
     
     interval = forms.ChoiceField(
         choices=[
+            ('0', 'Run Once'),
             ('custom', 'Custom Interval'),
             ('60', 'Hourly'),
             ('360', 'Every 6 Hours'),
@@ -53,14 +54,32 @@ class ScheduledSyncForm(forms.Form):
         help_text='Sync mode for scheduled execution'
     )
     
-    organization_id = forms.CharField(
+    organization_id = forms.ChoiceField(
         required=False,
-        max_length=100,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Leave blank for all organizations'
+        choices=[('', 'All Organizations')],
+        widget=forms.Select(attrs={
+            'class': 'form-select',
+            'id': 'organization_id'
         }),
-        help_text='Optional: Specific organization ID to sync'
+        help_text='Optional: Specific organization to sync'
+    )
+    
+    network_ids = forms.MultipleChoiceField(
+        required=False,
+        choices=[],
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select',
+            'size': '10',
+            'style': 'display: none;'
+        }),
+        help_text='Optional: Specific networks to sync (leave empty for all networks in organization)'
+    )
+    
+    sync_all_networks = forms.BooleanField(
+        required=False,
+        initial=True,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input', 'id': 'sync_all_networks_scheduled'}),
+        help_text='Sync all networks in organization'
     )
     
     enabled = forms.BooleanField(
@@ -69,6 +88,15 @@ class ScheduledSyncForm(forms.Form):
         widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         help_text='Enable this scheduled job'
     )
+    
+    def __init__(self, *args, **kwargs):
+        organizations = kwargs.pop('organizations', [])
+        super().__init__(*args, **kwargs)
+        
+        # Set organization choices
+        org_choices = [('', 'All Organizations')]
+        org_choices.extend([(org['id'], org['name']) for org in organizations])
+        self.fields['organization_id'].choices = org_choices
     
     def clean(self):
         cleaned_data = super().clean()

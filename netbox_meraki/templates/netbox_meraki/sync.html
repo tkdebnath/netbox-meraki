@@ -61,6 +61,11 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="selected-network-count" style="display: none; margin-top: 8px;">
+                                <span class="badge bg-success">
+                                    <i class="mdi mdi-check-circle"></i> <span id="selected-count">0</span> networks selected
+                                </span>
+                            </div>
                             <small class="text-muted">Select specific networks to sync</small>
                         </div>
                     </div>
@@ -144,6 +149,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Update selected network count
+    function updateSelectedCount() {
+        const checkboxes = networkList.querySelectorAll('input[name="network_ids[]"]:checked');
+        const count = checkboxes.length;
+        const countBadge = document.getElementById('selected-network-count');
+        const countSpan = document.getElementById('selected-count');
+        
+        if (count > 0 && countBadge && countSpan) {
+            countSpan.textContent = count;
+            countBadge.style.display = 'block';
+        } else if (countBadge) {
+            countBadge.style.display = 'none';
+        }
+    }
+    
     // Load networks for selected organization
     function loadNetworks(orgId) {
         networkList.innerHTML = `
@@ -198,6 +218,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 networkList.innerHTML = html;
+                
+                // Add change listeners to all checkboxes
+                const checkboxes = networkList.querySelectorAll('.network-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', updateSelectedCount);
+                });
             })
             .catch(error => {
                 console.error('Error loading networks:', error);
