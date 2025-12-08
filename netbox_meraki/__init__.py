@@ -9,6 +9,7 @@ class MerakiConfig(PluginConfig):
     author = 'Tarani Debnath'
     base_url = 'meraki'
     min_version = '4.0.0'
+    max_version = '4.99.99'
     required_settings = []
     default_settings = {
         'meraki_api_key': '',
@@ -29,8 +30,6 @@ class MerakiConfig(PluginConfig):
         'mt_device_role': 'Meraki Sensor',
         'default_device_role': 'Meraki Unknown',
     }
-    min_version = '4.4.0'
-    max_version = '4.4.99'
     
     def ready(self):
         super().ready()

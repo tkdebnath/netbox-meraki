@@ -694,8 +694,9 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         scheduled_jobs = []
         organizations = []
         
-        # Try to import ScheduledJob - don't show error on page load, only on actual usage
+        # Try to import ScheduledJob - try multiple paths for different NetBox versions
         can_schedule = False
+        import_error_msg = None
         try:
             from core.models import ScheduledJob
             from .jobs import MerakiSyncJob
@@ -705,9 +706,20 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             scheduled_jobs = ScheduledJob.objects.filter(
                 job_class=job_class_path
             ).order_by('-created')
-        except ImportError:
-            # Don't show error message here - user might just be browsing
-            pass
+        except ImportError as e:
+            # Try alternate import path
+            import_error_msg = str(e)
+            try:
+                from extras.models import ScheduledJob
+                from .jobs import MerakiSyncJob
+                can_schedule = True
+                
+                job_class_path = f"{MerakiSyncJob.__module__}.{MerakiSyncJob.__name__}"
+                scheduled_jobs = ScheduledJob.objects.filter(
+                    job_class=job_class_path
+                ).order_by('-created')
+            except ImportError as e2:
+                logger.warning(f"Could not import ScheduledJob: {e} / {e2}")
         except Exception as e:
             logger.error(f"Error fetching scheduled jobs: {e}")
             messages.warning(request, f'Error loading scheduled jobs: {str(e)}')

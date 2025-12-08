@@ -15,10 +15,13 @@
                 </div>
                 <div class="card-body">
                     {% if not can_schedule %}
-                    <div class="alert alert-danger">
+                    <div class="alert" style="background-color: #f8d7da; color: #842029; border: 1px solid #f5c2c7; padding: 15px; border-radius: 5px;">
                         <i class="mdi mdi-alert"></i>
                         <strong>Scheduled sync requires NetBox 4.0 or higher.</strong>
-                        <p class="mb-0">Please upgrade NetBox or use <a href="{% url 'plugins:netbox_meraki:sync' %}" class="alert-link">manual sync</a>.</p>
+                        <p class="mb-0">
+                            Your NetBox version does not support scheduled jobs. 
+                            Please use <a href="{% url 'plugins:netbox_meraki:sync' %}" style="color: #842029; text-decoration: underline; font-weight: bold;">manual sync</a> instead.
+                        </p>
                     </div>
                     {% endif %}
                     
