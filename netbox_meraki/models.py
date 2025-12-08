@@ -152,7 +152,7 @@ class PluginSettings(models.Model):
     
     
     process_unmatched_sites = models.BooleanField(
-        default=False,
+        default=True,
         verbose_name='Process Sites Not Matching Name Rules',
         help_text='If enabled, sites that do not match any name rules will still be processed using their original network name. If disabled, only sites matching name rules will be synced.'
     )
