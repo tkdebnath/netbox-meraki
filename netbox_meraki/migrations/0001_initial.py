@@ -114,6 +114,7 @@ class Migration(migrations.Migration):
                 ('progress_percent', models.IntegerField(default=0, help_text='Overall progress percentage')),
                 ('cancel_requested', models.BooleanField(default=False, help_text='Flag to cancel ongoing sync')),
                 ('cancelled_at', models.DateTimeField(blank=True, help_text='When sync was cancelled', null=True)),
+                ('sync_mode', models.CharField(choices=[('auto', 'Auto Sync'), ('review', 'Sync with Review'), ('dry_run', 'Dry Run')], default='auto', max_length=20)),
             ],
             options={
                 'verbose_name': 'Sync Log',
