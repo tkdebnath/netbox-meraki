@@ -904,6 +904,11 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
         logger.info(f"network_ids from getlist: {request.POST.getlist('network_ids')}")
         logger.info(f"sync_all_networks: {request.POST.get('sync_all_networks')}")
         
+        # DEBUG: Show visible message to user
+        network_ids_raw = request.POST.getlist('network_ids')
+        sync_all = request.POST.get('sync_all_networks')
+        messages.info(request, f"DEBUG: Received {len(network_ids_raw)} network IDs: {network_ids_raw[:3]}... | sync_all={sync_all}")
+        
         # Fetch organizations for form validation
         organizations = []
         try:
