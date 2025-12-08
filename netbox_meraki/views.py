@@ -715,12 +715,18 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             can_schedule = True
             
             # In NetBox 4.4+, filter by name instead of job_class
-            logger.info("Fetching scheduled Meraki jobs...")
-            scheduled_jobs = ScheduledJob.objects.filter(
-                name__icontains='Meraki',
-                interval__isnull=False  # Only recurring jobs
-            ).order_by('-created')
-            logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
+            try:
+                logger.info("Fetching scheduled Meraki jobs...")
+                scheduled_jobs = ScheduledJob.objects.filter(
+                    name__icontains='Meraki',
+                    interval__isnull=False  # Only recurring jobs
+                ).order_by('-created')
+                logger.info(f"Found {len(scheduled_jobs)} scheduled jobs")
+            except Exception as query_error:
+                logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
+                messages.warning(request, f'Error loading scheduled jobs: {str(query_error)}')
+                # Keep can_schedule=True since imports worked
+                
         except ImportError as e:
             # Try alternate import path
             import_error_msg = str(e)
@@ -733,16 +739,19 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 can_schedule = True
                 
                 # In NetBox 4.4+, filter by name instead of job_class
-                scheduled_jobs = ScheduledJob.objects.filter(
-                    name__icontains='Meraki',
-                    interval__isnull=False
-                ).order_by('-created')
+                try:
+                    scheduled_jobs = ScheduledJob.objects.filter(
+                        name__icontains='Meraki',
+                        interval__isnull=False
+                    ).order_by('-created')
+                except Exception as query_error:
+                    logger.error(f"Error querying scheduled jobs: {query_error}", exc_info=True)
+                    # Keep can_schedule=True since imports worked
+                    
             except ImportError as e2:
                 logger.error(f"✗ Failed to import from extras.models: {e2}")
                 logger.error(f"SCHEDULING DISABLED - Import errors: core.models ({e}) / extras.models ({e2})")
-        except Exception as e:
-            logger.error(f"Error fetching scheduled jobs: {e}", exc_info=True)
-            messages.warning(request, f'Error loading scheduled jobs: {str(e)}')
+                can_schedule = False
         
         # Fetch organizations for dropdown even if scheduling not available
         try:
@@ -755,6 +764,9 @@ class ScheduledSyncView(LoginRequiredMixin, PermissionRequiredMixin, View):
             messages.warning(request, f'Could not load organizations: {str(e)}')
         
         form = ScheduledSyncForm(organizations=organizations)
+        
+        logger.info(f"DEBUG: can_schedule = {can_schedule}")
+        logger.info(f"DEBUG: scheduled_jobs count = {len(scheduled_jobs)}")
         
         context = {
             'scheduled_jobs': scheduled_jobs,
