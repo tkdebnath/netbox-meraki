@@ -16,16 +16,35 @@ class MerakiSyncJob(JobRunner):
     class Meta:
         name = "Meraki Dashboard Sync"
         description = "Synchronize networks, devices, VLANs, and prefixes from Meraki Dashboard to NetBox"
+        field_order = ['sync_mode', 'organization_id', 'network_ids']
+    
+    sync_mode = None  # Will use PluginSettings default if not provided
+    organization_id = None  # Optional: sync specific organization
+    network_ids = None  # Optional: list of network IDs for selective sync
     
     def run(self, *args, **kwargs):
-        settings = PluginSettings.get_settings()
-        sync_mode = settings.sync_mode
+        # Get parameters from job data if provided
+        sync_mode = kwargs.get('sync_mode') or self.sync_mode
+        organization_id = kwargs.get('organization_id') or self.organization_id
+        network_ids = kwargs.get('network_ids') or self.network_ids
+        
+        # If no sync_mode provided, use PluginSettings default
+        if not sync_mode:
+            settings = PluginSettings.get_settings()
+            sync_mode = settings.sync_mode
         
         self.logger.info(f"Starting Meraki sync (mode: {sync_mode})")
+        if organization_id:
+            self.logger.info(f"Organization filter: {organization_id}")
+        if network_ids:
+            self.logger.info(f"Network filter: {len(network_ids)} networks")
         
         try:
             sync_service = MerakiSyncService(sync_mode=sync_mode)
-            sync_log = sync_service.sync_all()
+            sync_log = sync_service.sync_all(
+                organization_id=organization_id if organization_id else None,
+                network_ids=network_ids if network_ids else None
+            )
             
             self.logger.info(f"Sync completed with status: {sync_log.status}")
             self.logger.info(f"Organizations: {sync_log.organizations_synced}")

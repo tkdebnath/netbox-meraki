@@ -367,80 +367,56 @@ Add tags to all synchronized objects:
 
 ### Scheduled Synchronization
 
-Schedule syncs through NetBox's job system:
+Use NetBox's native job scheduling system to automate syncs:
 
-1. Go to **Jobs → Background Jobs** in NetBox
-2. Find **"Meraki Dashboard Sync"**
-3. Click **Run Job Now**
-4. Set **Repeat every** to your desired interval (in minutes):
-   - `60` = Hourly
-   - `1440` = Daily
-   - `10080` = Weekly
-5. Click **Run Job**
+#### Method 1: NetBox Web UI (Recommended)
 
-Or schedule programmatically:
+1. Navigate to **Jobs → Background Jobs** in NetBox
+2. Click **+ Add Scheduled Job**
+3. Select **Job**: `netbox_meraki.jobs.MerakiSyncJob`
+4. Configure scheduling:
+   - **Name**: `Meraki Daily Sync`
+   - **Interval**: Choose frequency (e.g., `Daily`, `Hourly`, `Weekly`)
+   - **Start time**: Set when to first run
+   - **Enabled**: Check to activate
+5. Click **Create**
+
+Your scheduled job will now appear in the **Scheduled Jobs** list and execute automatically.
+
+#### Method 2: API/Python
+
+Schedule programmatically using NetBox's API:
 
 ```python
+from core.models import ScheduledJob
 from netbox_meraki.jobs import MerakiSyncJob
 
-MerakiSyncJob.enqueue(user=request.user, interval=60)
+# Create a daily sync at 2 AM
+ScheduledJob.objects.create(
+    name="Meraki Daily Sync",
+    job_class=MerakiSyncJob,
+    interval=1440,  # minutes (1440 = daily)
+    start_time="02:00:00"
+)
 ```
 
-#### Alternative: Cron Job
+#### Method 3: Management Command
 
-Add to crontab:
+Trigger a one-time sync via command line:
 
 ```bash
-*/5 * * * * cd /opt/netbox && /opt/netbox/venv/bin/python manage.py run_scheduled_sync
+cd /opt/netbox
+source venv/bin/activate
+python manage.py runjob netbox_meraki.jobs.MerakiSyncJob
 ```
 
-#### Alternative: Systemd Timer
+#### Monitoring Scheduled Jobs
 
-Create `/etc/systemd/system/netbox-meraki-scheduler.service`:
+- View job history: **Jobs → Job Results**
+- Check logs: Click on any job result to see detailed output
+- Cancel running jobs: Use the **Cancel** button on active jobs
 
-```ini
-[Unit]
-Description=NetBox Meraki Scheduled Sync
-After=network.target
-
-[Service]
-Type=oneshot
-User=netbox
-WorkingDirectory=/opt/netbox
-ExecStart=/opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py run_scheduled_sync
-```
-
-Create `/etc/systemd/system/netbox-meraki-scheduler.timer`:
-
-```ini
-[Unit]
-Description=Run NetBox Meraki Scheduled Sync
-
-[Timer]
-OnCalendar=*:0/5
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable netbox-meraki-scheduler.timer
-sudo systemctl start netbox-meraki-scheduler.timer
-```
-
-
-
-#### Task Execution and Monitoring
-
-- Tasks update their status in real-time (Pending → Running → Completed/Failed)
-- Failed tasks automatically retry at next scheduled time
-- Task history tracks total runs, successes, and failures
-- Last error message shown for failed tasks
-- Success rate calculated from historical executions
+**Note:** All scheduled jobs use the sync mode configured in **Configuration → Default Sync Mode** unless overridden programmatically.
 
 #### API Performance Tab
 

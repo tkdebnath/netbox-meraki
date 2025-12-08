@@ -26,9 +26,6 @@ class PluginSettingsForm(forms.ModelForm):
             'vlan_tags',
             'prefix_tags',
             'process_unmatched_sites',
-            'enable_scheduled_sync',
-            'sync_interval_minutes',
-            'scheduled_sync_mode',
             'enable_api_throttling',
             'api_requests_per_second',
             'enable_multithreading',
@@ -54,8 +51,6 @@ class PluginSettingsForm(forms.ModelForm):
             'vlan_tags': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Meraki,VLAN'}),
             'prefix_tags': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Meraki,Subnet'}),
             'process_unmatched_sites': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'enable_scheduled_sync': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'scheduled_sync_mode': forms.Select(attrs={'class': 'form-select'}),
             'enable_api_throttling': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'api_requests_per_second': forms.NumberInput(attrs={'min': 1, 'max': 10, 'class': 'form-control'}),
             'enable_multithreading': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -123,58 +118,6 @@ class PrefixFilterRuleForm(forms.ModelForm):
             'filter_type': forms.Select(attrs={'class': 'form-select'}),
             'prefix_length_filter': forms.Select(attrs={'class': 'form-select'}),
             'priority': forms.NumberInput(attrs={'class': 'form-control'}),
-        }
-
-
-class ScheduledSyncTaskForm(forms.ModelForm):
-    
-    class Meta:
-        model = ScheduledSyncTask
-        fields = [
-            'name',
-            'sync_mode',
-            'execution_mode',
-            'selected_networks',
-            'sync_organizations',
-            'sync_sites',
-            'sync_devices',
-            'sync_vlans',
-            'sync_prefixes',
-            'sync_interfaces',
-            'sync_ip_addresses',
-            'sync_ssids',
-            'cleanup_orphaned',
-            'frequency',
-            'scheduled_datetime',
-            'enabled',
-        ]
-        widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'My Daily Sync'}),
-            'sync_mode': forms.Select(attrs={'class': 'form-select'}),
-            'execution_mode': forms.Select(attrs={'class': 'form-select'}),
-            'selected_networks': forms.HiddenInput(),
-            'sync_organizations': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_sites': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_devices': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_vlans': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_prefixes': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_interfaces': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_ip_addresses': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'sync_ssids': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'cleanup_orphaned': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'frequency': forms.Select(attrs={'class': 'form-select'}),
-            'scheduled_datetime': forms.DateTimeInput(attrs={
-                'type': 'datetime-local',
-                'class': 'form-control'
-            }),
-            'enabled': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-        }
-        help_texts = {
-            'name': 'A descriptive name for this scheduled task',
-            'sync_mode': 'Choose whether to sync all networks or select specific ones',
-            'execution_mode': 'Auto applies changes immediately, Review stages for approval, Dry Run only previews',
-            'frequency': 'How often should this task run',
-            'scheduled_datetime': 'When should this task first run (and repeat based on frequency)',
         }
 
 
