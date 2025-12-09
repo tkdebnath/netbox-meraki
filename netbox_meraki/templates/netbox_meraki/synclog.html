@@ -281,13 +281,13 @@
                 <div id="progress-logs" class="bg-body-secondary" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.9em; padding: 15px; border-radius: 4px; color: var(--bs-body-color);">
                     {% for log in sync_log.progress_logs %}
                     <div class="log-entry" style="margin-bottom: 4px; color: var(--bs-body-color);">
-                        <span class="text-muted" style="opacity: 0.7;">[{{ log.timestamp|slice:":19" }}]</span>
+                        <span class="text-muted" style="opacity: 0.7;">[{{ log.timestamp|slice:"11:19" }}]</span>
                         {% if log.level == 'error' %}
                             <span class="badge bg-danger" style="color: #fff;">ERROR</span>
                         {% elif log.level == 'warning' %}
                             <span class="badge bg-warning" style="color: #000;">WARN</span>
                         {% else %}
-                            <span class="badge bg-info" style="color: #fff;">INFO</span>
+                            <span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">INFO</span>
                         {% endif %}
                         <span style="color: var(--bs-body-color);">{{ log.message }}</span>
                     </div>
@@ -425,7 +425,7 @@ function fetchProgress() {
                                 '<span class="badge bg-danger">ERROR</span>' :
                                 log.level === 'warning' ?
                                 '<span class="badge bg-warning" style="color: #000;">WARN</span>' :
-                                '<span class="badge bg-info" style="color: #fff;">INFO</span>';
+                                '<span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">INFO</span>';
                         
                             logEntry.innerHTML = `<span class="text-muted" style="opacity: 0.7;">[${timestamp}]</span> ${levelBadge} <span style="color: var(--bs-body-color);">${log.message}</span>`;
                             logsContainer.appendChild(logEntry);
@@ -563,12 +563,12 @@ function fetchProgress() {
                         const logEntry = document.createElement('div');
                         logEntry.className = 'log-entry';
                         
-                        const timestamp = log.timestamp.substring(0, 19);
+                        const timestamp = log.timestamp.substring(11, 19);  // Extract only HH:MM:SS
                         const levelBadge = log.level === 'error' ? 
                             '<span class="badge bg-danger">ERROR</span>' :
                             log.level === 'warning' ?
                             '<span class="badge bg-warning">WARN</span>' :
-                            '<span class="badge bg-info">INFO</span>';
+                            '<span class="badge" style="background-color: #0d6efd; color: #fff; font-weight: 600;">INFO</span>';
                         
                         logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${levelBadge} <span>${log.message}</span>`;
                         logsContainer.appendChild(logEntry);
