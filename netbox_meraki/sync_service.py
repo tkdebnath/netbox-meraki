@@ -1751,6 +1751,7 @@ class MerakiSyncService:
                     group=vlan_group,
                     defaults={
                         'name': data['name'],
+                        'site': site,
                         'status': 'active',
                         'description': data.get('description', ''),
                     }
