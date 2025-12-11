@@ -54,7 +54,7 @@ class MerakiSyncService:
         device_ct = ContentType.objects.get_for_model(Device)
         
         # Remove old custom fields if they exist
-        old_fields = ['meraki_firmware', 'meraki_mac_address']
+        old_fields = ['meraki_firmware', 'meraki_mac_address', 'software_version', 'mac_address']
         for old_field_name in old_fields:
             try:
                 old_field = CustomField.objects.get(name=old_field_name)
@@ -64,7 +64,7 @@ class MerakiSyncService:
                 pass  # Already removed or never existed
         
         firmware_field, created = CustomField.objects.get_or_create(
-            name='software_version',
+            name='software',
             defaults={
                 'label': 'Software Version',
                 'type': 'text',
@@ -74,12 +74,12 @@ class MerakiSyncService:
         )
         if created:
             firmware_field.object_types.set([device_ct])
-            logger.info("Created custom field: software_version")
+            logger.info("Created custom field: software")
         elif device_ct not in firmware_field.object_types.all():
             firmware_field.object_types.add(device_ct)
         
         mac_field, created = CustomField.objects.get_or_create(
-            name='mac_address',
+            name='mac',
             defaults={
                 'label': 'MAC Address',
                 'type': 'text',
@@ -89,7 +89,7 @@ class MerakiSyncService:
         )
         if created:
             mac_field.object_types.set([device_ct])
-            logger.info("Created custom field: mac_address")
+            logger.info("Created custom field: mac")
         elif device_ct not in mac_field.object_types.all():
             mac_field.object_types.add(device_ct)
     
@@ -637,9 +637,9 @@ class MerakiSyncService:
             'firmware': firmware_version,
             'comments': comments,
             'custom_field_data': {
-                'software_version': firmware_version if firmware_version != 'Unknown' else '',
+                'software': firmware_version if firmware_version != 'Unknown' else '',
                 'meraki_network_id': device.get('networkId', ''),
-                'mac_address': device.get('mac', ''),
+                'mac': device.get('mac', ''),
             }
         }
         
