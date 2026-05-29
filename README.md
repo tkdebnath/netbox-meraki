@@ -62,7 +62,7 @@ source /opt/netbox/venv/bin/activate
 
 # Clone repository
 cd /opt
-git clone https://github.com/yourusername/netbox-meraki.git
+git clone https://github.com/tkdebnath/netbox-meraki.git
 cd netbox-meraki
 
 # Install plugin
